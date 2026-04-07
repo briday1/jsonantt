@@ -94,14 +94,13 @@ render_chart(config, "project.png", dpi=150)
 | `end` | date string | Optional chart x-axis end date |
 | `style` | object | Visual style overrides (see below) |
 | `tasks` | array | Top-level list of task objects |
-| `arrows` | array | Dependency arrows drawn between tasks (see below) |
 
 ### Task object
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | string | **Required.** Task label |
-| `id` | string | Unique identifier used for `not_before` and `arrows` references |
+| `id` | string | Unique identifier used for `not_before` references |
 | `start` | date string | Bar start date |
 | `end` | date string | Bar end date |
 | `duration` | string or int | Duration from `start` (or resolved `not_before` end): `"14d"`, `"2w"`, `"3m"`, `"2y"`, or a plain integer (days) |
@@ -116,15 +115,6 @@ render_chart(config, "project.png", dpi=150)
 > **Auto date computation:** When a task has `children` but no explicit `start`/`end`, the dates are computed automatically as the earliest child start and latest child end, recursively.
 
 > **Duration formats:** `d`/`day`/`days`, `w`/`week`/`weeks`, `m`/`month`/`months`, `y`/`year`/`years` — e.g. `"14d"`, `"2w"`, `"3m"`, `"1y"`.
-
-### Arrow object
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `from` | string | `id` of the source task (arrow starts at its end) |
-| `to` | string | `id` of the target task (arrow points to its start) |
-| `color` | CSS hex string | Arrow colour (default: `"#888888"`) |
-| `label` | string | Optional text label drawn on the arrow |
 
 ### Style object
 
@@ -161,19 +151,20 @@ See the [`examples/`](examples/) folder for ready-to-run JSON files.
 
 ![simple](examples/simple.png)
 
+### Dependencies
+
+[`examples/dependencies.json`](examples/dependencies.json) — `id`, `duration`, and `not_before`
+
+![dependencies](examples/dependencies.png)
+
 ### Complex roadmap
 
 [`examples/complex.json`](examples/complex.json) — a multi-year roadmap with deep nesting and custom colours
 
 ![complex](examples/complex.png)
 
-### Dependencies & arrows
 
-[`examples/dependencies.json`](examples/dependencies.json) — `id`, `duration`, `not_before`, and `arrows`
-
-![dependencies](examples/dependencies.png)
-
-Generate them locally:
+## How to Run
 
 ```bash
 jsonantt examples/simple.json examples/simple.png
@@ -181,8 +172,3 @@ jsonantt examples/complex.json examples/complex.png
 jsonantt examples/dependencies.json examples/dependencies.png
 ```
 
----
-
-## License
-
-MIT

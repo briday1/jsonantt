@@ -1,5 +1,5 @@
 {
-  "title": "Dependency Example — start/duration, not_before, and arrows",
+  "title": "Dependency Example — start/duration and not_before",
   "dateformat": "%Y-%m-%d",
   "style": {
     "width": 16,
@@ -64,28 +64,6 @@
       "milestone": true,
       "not_before": "rollout",
       "color": "#FFD700"
-    }
-  ],
-  "arrows": [
-    {
-      "from": "design",
-      "to": "backend",
-      "color": "#4472C4"
-    },
-    {
-      "from": "design",
-      "to": "frontend",
-      "color": "#4472C4"
-    },
-    {
-      "from": "backend",
-      "to": "qa",
-      "color": "#70AD47"
-    },
-    {
-      "from": "qa",
-      "to": "launch",
-      "color": "#FF5757"
     }
   ]
 }
