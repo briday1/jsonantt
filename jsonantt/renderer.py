@@ -347,10 +347,11 @@ def _style_bar_axis(ax, x_start, x_end, y_min, y_max, style: Style, n: int) -> N
 
     # position ticks and labels
     ax.xaxis.set_ticks_position(pos)   # "top", "bottom", or "both"
-    ax.xaxis.set_label_position("top" if pos in ("top", "both") else "bottom")
+    labeltop    = pos in ("top",    "both")
+    labelbottom = pos in ("bottom", "both")
 
     ax.tick_params(axis="x", which="major", labelsize=style.font_size,
-                   rotation=0, pad=4)
+                   rotation=0, pad=4, labeltop=labeltop, labelbottom=labelbottom)
     ax.tick_params(axis="x", which="minor", length=4, width=0.6,
                    color=style.grid_color, pad=0)
     # force font size on any already-generated tick labels
