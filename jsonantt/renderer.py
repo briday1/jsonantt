@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import List, Optional, Tuple
 
 import matplotlib.dates as mdates
@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.figure import Figure
 
-from .models import ChartConfig, Style, Task
+from .models import Arrow, ChartConfig, Style, Task
 
 # ---------------------------------------------------------------------------
 # Internal helper types
@@ -22,13 +22,14 @@ from .models import ChartConfig, Style, Task
 class _Row:
     """A flattened task row ready for rendering."""
 
-    __slots__ = ("task", "depth", "row_index", "color")
+    __slots__ = ("task", "depth", "row_index", "color", "number")
 
-    def __init__(self, task: Task, depth: int, row_index: int, color: str) -> None:
+    def __init__(self, task: Task, depth: int, row_index: int, color: str, number: str = "") -> None:
         self.task = task
         self.depth = depth
         self.row_index = row_index
         self.color = color
+        self.number = number
 
 
 # ---------------------------------------------------------------------------
@@ -47,10 +48,35 @@ def render_chart(config: ChartConfig, output_path: str, dpi: int = 150) -> None:
 
     # ---- figure dimensions ------------------------------------------------
     row_h_in = style.row_height
-    top_pad = 0.6 if config.title else 0.25
-    bottom_pad = 0.65
+    tick_pos = (style.tick_position or "top").lower()
+    # extra room at top: title alone needs 0.6in; ticks-on-top need additional space
+    tick_on_top = tick_pos in ("top", "both")
+    top_pad = (0.9 if tick_on_top else 0.6) if config.title else (0.55 if tick_on_top else 0.25)
+    bottom_pad = 0.55 if tick_pos in ("bottom", "both") else 0.25
     fig_h = n * row_h_in + top_pad + bottom_pad
     fig_w = style.width
+
+    # ---- compute label panel width from actual text content ---------------
+    # Approximate character width: font is roughly 0.55× the point size wide.
+    # indent_chars: how many characters each depth level is worth visually.
+    char_width_in = style.font_size * 0.55 / 72.0
+    indent_chars = 3
+    left_margin_in = 0.15
+    right_margin_in = 0.05
+
+    max_text_in = 0.0
+    for row in rows:
+        number_str = row.number + "." if "." not in row.number else row.number
+        label = number_str + "  " + row.task.name
+        text_in = (row.depth * indent_chars + len(label)) * char_width_in
+        max_text_in = max(max_text_in, text_in)
+
+    label_width_in = left_margin_in + max_text_in + right_margin_in
+    label_fraction = min(0.55, label_width_in / fig_w)
+
+    # indent step as a fraction of the label panel (0-1 data coords)
+    indent_step = (indent_chars * char_width_in) / label_width_in
+    left_margin_frac = left_margin_in / label_width_in
 
     # ---- figure & grid ----------------------------------------------------
     fig = plt.figure(figsize=(fig_w, fig_h), facecolor=style.background)
@@ -64,7 +90,7 @@ def render_chart(config: ChartConfig, output_path: str, dpi: int = 150) -> None:
     gs = gridspec.GridSpec(
         1, 2,
         figure=fig,
-        width_ratios=[style.label_fraction, 1.0 - style.label_fraction],
+        width_ratios=[label_fraction, 1.0 - label_fraction],
         wspace=0,
     )
 
@@ -77,6 +103,25 @@ def render_chart(config: ChartConfig, output_path: str, dpi: int = 150) -> None:
     pad = max(1, (x_max - x_min).days * 0.02)
     x_start = x_min - timedelta(days=pad)
     x_end = x_max + timedelta(days=pad)
+    # snap to minor-tick boundary so the first minor gridline is visible at the left edge
+    span_days_raw = (x_end - x_start).days
+    minor_key = config.style.minor_tick
+    if not minor_key:
+        if span_days_raw > 365:
+            minor_key = "quarter"
+        elif span_days_raw > 90:
+            minor_key = "month"
+        elif span_days_raw > 21:
+            minor_key = "week"
+    if minor_key:
+        x_start = _snap_to_tick_start(x_start, minor_key)
+        x_end = _snap_to_tick_end(x_end, minor_key)
+
+    # convert to datetime so matplotlib locators can call .replace(hour=0, ...)
+    if not isinstance(x_start, datetime):
+        x_start = datetime(x_start.year, x_start.month, x_start.day)
+    if not isinstance(x_end, datetime):
+        x_end = datetime(x_end.year, x_end.month, x_end.day)
 
     # ---- y-axis range (top row = highest y value) -------------------------
     y_min = -0.5
@@ -86,23 +131,26 @@ def render_chart(config: ChartConfig, output_path: str, dpi: int = 150) -> None:
     _style_label_axis(ax_lbl, y_min, y_max, style, n)
     _style_bar_axis(ax_bar, x_start, x_end, y_min, y_max, style, n)
 
-    # ---- alternating row bands --------------------------------------------
+    # ---- alternating row bands (bar panel only; label panel has its own tint) -
     for i in range(n):
         if i % 2 == 1:
             _row_band(ax_bar, i, style)
 
     # ---- draw each row ----------------------------------------------------
     for row in rows:
-        _draw_row(ax_lbl, ax_bar, row, n, style)
+        _draw_row(ax_lbl, ax_bar, row, n, style, indent_step, left_margin_frac)
+
+    # ---- dependency arrows (drawing disabled) -----------------------------
 
     # ---- title ------------------------------------------------------------
     if config.title:
+        title_y = 1 - (top_pad * (0.2 if tick_on_top else 0.35)) / fig_h
         fig.suptitle(
             config.title,
             fontsize=style.font_size + 3,
             fontweight="bold",
             x=0.5,
-            y=1 - (top_pad * 0.35) / fig_h,
+            y=title_y,
             va="top",
             ha="center",
         )
@@ -110,6 +158,77 @@ def render_chart(config: ChartConfig, output_path: str, dpi: int = 150) -> None:
     fig.savefig(output_path, dpi=dpi, bbox_inches="tight",
                 facecolor=style.background)
     plt.close(fig)
+
+
+def _snap_to_tick_start(d: date, key: str) -> date:
+    """Snap *d* back to the start of the enclosing tick period."""
+    k = key.strip().lower()
+    if k in ("year", "years"):
+        return date(d.year, 1, 1)
+    elif k in ("quarter", "quarters"):
+        q_start_month = ((d.month - 1) // 3) * 3 + 1
+        return date(d.year, q_start_month, 1)
+    elif k in ("month", "months"):
+        return date(d.year, d.month, 1)
+    elif k in ("week", "weeks"):
+        return d - timedelta(days=d.weekday())  # Monday
+    else:
+        return d
+
+
+def _snap_to_tick_end(d: date, key: str) -> date:
+    """Snap *d* forward to the start of the next tick period (covers the date)."""
+    start = _snap_to_tick_start(d, key)
+    if start >= d:
+        return d  # already on a boundary
+    k = key.strip().lower()
+    if k in ("year", "years"):
+        return date(d.year + 1, 1, 1)
+    elif k in ("quarter", "quarters"):
+        q_start_month = ((d.month - 1) // 3) * 3 + 1
+        next_month = q_start_month + 3
+        if next_month > 12:
+            return date(d.year + 1, 1, 1)
+        return date(d.year, next_month, 1)
+    elif k in ("month", "months"):
+        if d.month == 12:
+            return date(d.year + 1, 1, 1)
+        return date(d.year, d.month + 1, 1)
+    elif k in ("week", "weeks"):
+        return d + timedelta(days=(7 - d.weekday()))  # next Monday
+    else:
+        return d
+
+
+def _iter_ticks(x_start: datetime, x_end: datetime, key: str):
+    """Yield datetime positions from x_start to x_end for the given tick key."""
+    k = key.strip().lower()
+    # start at the first tick on or before x_start
+    d = _snap_to_tick_start(x_start, key)
+    if not isinstance(d, datetime):
+        d = datetime(d.year, d.month, d.day)
+    end = x_end if isinstance(x_end, datetime) else datetime(x_end.year, x_end.month, x_end.day)
+
+    while d <= end:
+        yield d
+        if k in ("year", "years"):
+            d = datetime(d.year + 1, 1, 1)
+        elif k in ("quarter", "quarters"):
+            m = d.month + 3
+            y = d.year + (m - 1) // 12
+            m = (m - 1) % 12 + 1
+            d = datetime(y, m, 1)
+        elif k in ("month", "months"):
+            m = d.month + 1
+            y = d.year + (m - 1) // 12
+            m = (m - 1) % 12 + 1
+            d = datetime(y, m, 1)
+        elif k in ("week", "weeks"):
+            d = d + timedelta(weeks=1)
+        elif k in ("day", "days"):
+            d = d + timedelta(days=1)
+        else:
+            break
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +242,7 @@ def _flatten(
     depth: int = 0,
     palette_index: int = 0,
     parent_color: Optional[str] = None,
+    number_prefix: str = "",
 ) -> List[_Row]:
     rows: List[_Row] = []
     palette = style.colors or ["#4472C4"]
@@ -137,7 +257,8 @@ def _flatten(
             color = palette[palette_index % len(palette)]
             palette_index += 1
 
-        row = _Row(task=task, depth=depth, row_index=0, color=color)
+        number = number_prefix + str(task_idx + 1)
+        row = _Row(task=task, depth=depth, row_index=0, color=color, number=number)
         rows.append(row)
 
         if task.children:
@@ -147,6 +268,7 @@ def _flatten(
                 depth=depth + 1,
                 palette_index=palette_index,
                 parent_color=color,
+                number_prefix=number + ".",
             )
             rows.extend(child_rows)
 
@@ -193,7 +315,8 @@ def _style_label_axis(ax, y_min, y_max, style: Style, n: int) -> None:
     ax.set_ylim(y_min, y_max)
     ax.invert_yaxis()
     ax.axis("off")
-    ax.set_facecolor(style.background)
+    # slightly tinted background so the label column reads as a distinct zone
+    ax.set_facecolor(style.row_band_color)
 
 
 def _style_bar_axis(ax, x_start, x_end, y_min, y_max, style: Style, n: int) -> None:
@@ -208,35 +331,69 @@ def _style_bar_axis(ax, x_start, x_end, y_min, y_max, style: Style, n: int) -> N
 
     span_days = (x_end - x_start).days
 
-    # choose sensible date tick locator & formatter
-    if span_days <= 21:
-        locator = mdates.DayLocator(interval=1)
-        fmt = mdates.DateFormatter("%b %d")
-    elif span_days <= 90:
-        locator = mdates.WeekdayLocator(byweekday=mdates.MO)
-        fmt = mdates.DateFormatter("%b %d")
-    elif span_days <= 365:
-        locator = mdates.MonthLocator()
-        fmt = mdates.DateFormatter("%b '%y")
-    elif span_days <= 365 * 3:
-        locator = mdates.MonthLocator(interval=3)
-        fmt = mdates.DateFormatter("%b '%y")
-    else:
-        locator = mdates.YearLocator()
-        fmt = mdates.DateFormatter("%Y")
+    # ---- resolve major / minor keys, defaulting to year / quarter ----------
+    major_key = style.major_tick or "year"
+    minor_key = style.minor_tick or "quarter"
 
-    ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(fmt)
-    ax.xaxis.set_tick_params(labelsize=style.font_size - 1, rotation=30)
+    major_loc, major_fmt = _tick_locator_fmt(major_key, span_days)
+    minor_loc, _         = _tick_locator_fmt(minor_key, span_days)
 
-    # gridlines
+    ax.xaxis.set_major_locator(major_loc)
+    ax.xaxis.set_major_formatter(major_fmt)
+    ax.xaxis.set_minor_locator(minor_loc)
+    ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+
+    pos = (style.tick_position or "top").lower()
+
+    # position ticks and labels
+    ax.xaxis.set_ticks_position(pos)   # "top", "bottom", or "both"
+    ax.xaxis.set_label_position("top" if pos in ("top", "both") else "bottom")
+
+    ax.tick_params(axis="x", which="major", labelsize=style.font_size,
+                   rotation=0, pad=4)
+    ax.tick_params(axis="x", which="minor", length=4, width=0.6,
+                   color=style.grid_color, pad=0)
+    # force font size on any already-generated tick labels
+    for lbl in ax.get_xticklabels(which="both"):
+        lbl.set_fontsize(style.font_size)
+
     ax.yaxis.set_visible(False)
-    ax.grid(axis="x", color=style.grid_color, linewidth=0.6, zorder=0)
-
-    # clean up spines
-    for spine in ["left", "right", "top"]:
-        ax.spines[spine].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(pos in ("top", "both"))
+    ax.spines["top"].set_color(style.grid_color)
+    ax.spines["bottom"].set_visible(pos in ("bottom", "both"))
     ax.spines["bottom"].set_color(style.grid_color)
+
+    # ---- draw gridlines by iterating dates directly -----------------------
+    for dt in _iter_ticks(x_start, x_end, major_key):
+        ax.axvline(mdates.date2num(dt), color=style.grid_color,
+                   linewidth=style.major_grid_width, linestyle="-", zorder=1)
+
+    for dt in _iter_ticks(x_start, x_end, minor_key):
+        ax.axvline(mdates.date2num(dt), color=style.grid_color,
+                   linewidth=style.minor_grid_width, linestyle=":", zorder=1)
+
+
+def _tick_locator_fmt(key: str, span_days: int):
+    """Return (locator, formatter) for a tick key string."""
+    k = key.strip().lower()
+    if k in ("year", "years"):
+        return mdates.YearLocator(), mdates.DateFormatter("%Y")
+    elif k in ("quarter", "quarters"):
+        def _qfmt(x, pos=None):
+            d = mdates.num2date(x)
+            q = (d.month - 1) // 3 + 1
+            return f"Q{q} {d.year}"
+        return mdates.MonthLocator(bymonth=[1, 4, 7, 10]), ticker.FuncFormatter(_qfmt)
+    elif k in ("month", "months"):
+        return mdates.MonthLocator(), mdates.DateFormatter("%b '%y")
+    elif k in ("week", "weeks"):
+        return mdates.WeekdayLocator(byweekday=mdates.MO), mdates.DateFormatter("%b %d")
+    elif k in ("day", "days"):
+        return mdates.DayLocator(), mdates.DateFormatter("%b %d")
+    else:
+        raise ValueError(f"Unknown tick spec {key!r}. Use: year, quarter, month, week, day")
 
 
 # ---------------------------------------------------------------------------
@@ -254,20 +411,23 @@ def _row_band(ax, row_index: int, style: Style) -> None:
     )
 
 
-def _draw_row(ax_lbl, ax_bar, row: _Row, n: int, style: Style) -> None:
+def _draw_row(ax_lbl, ax_bar, row: _Row, n: int, style: Style,
+             indent_step: float = 0.05, left_margin: float = 0.04) -> None:
     task = row.task
     y = row.row_index
 
     # ---- label ------------------------------------------------------------
-    indent = " " * (style.indent_size * row.depth)
-    label_text = indent + task.name
+    x = left_margin + row.depth * indent_step
 
-    # bold for parent tasks
-    weight = "bold" if task.is_parent and not task.milestone else "normal"
+    number_str = row.number + "." if "." not in row.number else row.number
+    label_text = number_str + "  " + task.name
+
+    # bold: explicit task flag, or auto-bold depth-0 when style.bold_tasks is on
+    weight = "bold" if (task.bold or (style.bold_tasks and row.depth == 0)) else "normal"
     ax_lbl.text(
-        0.97, y,
+        x, y,
         label_text,
-        ha="right",
+        ha="left",
         va="center",
         fontsize=style.font_size,
         fontweight=weight,
@@ -294,89 +454,83 @@ def _draw_bar(ax_bar, row: _Row, y: float, style: Style) -> None:
         end = start + timedelta(days=1)
 
     bar_h = style.bar_height
-    if task.is_parent:
-        # thinner "summary" bar with a darker outline
-        bar_h = bar_h * 0.45
-        edge_color = _darken(row.color, 0.4)
-        alpha = 0.85
-        lw = 1.2
-        # draw arrow-cap triangles at both ends (MS-Project style summary bar)
-        _draw_summary_caps(ax_bar, start, end, y, row.color, edge_color, bar_h)
-    else:
-        edge_color = _darken(row.color, 0.25)
-        alpha = 0.90
-        lw = 0.8
-
     bar = mpatches.FancyBboxPatch(
         (mdates.date2num(start), y - bar_h / 2),
         mdates.date2num(end) - mdates.date2num(start),
         bar_h,
         boxstyle="round,pad=0.02",
         facecolor=row.color,
-        edgecolor=edge_color,
-        linewidth=lw,
-        alpha=alpha,
+        edgecolor="none",
+        linewidth=0,
+        alpha=0.90,
         zorder=3,
     )
     ax_bar.add_patch(bar)
 
 
-def _draw_summary_caps(ax_bar, start: date, end: date, y: float,
-                       color: str, edge_color: str, bar_h: float) -> None:
-    """Draw small downward triangles at start/end of a parent (summary) bar."""
-    cap_h = bar_h * 2.2
-    cap_w = mdates.date2num(start + timedelta(days=1)) - mdates.date2num(start)
-    cap_w = cap_w * 0.8
-
-    for x_centre in [mdates.date2num(start), mdates.date2num(end)]:
-        tri = plt.Polygon(
-            [
-                [x_centre - cap_w * 0.5, y - bar_h / 2],
-                [x_centre + cap_w * 0.5, y - bar_h / 2],
-                [x_centre, y + cap_h / 2],
-            ],
-            closed=True,
-            facecolor=color,
-            edgecolor=edge_color,
-            linewidth=0.8,
-            zorder=4,
-        )
-        ax_bar.add_patch(tri)
-
-
 def _draw_milestone(ax_bar, row: _Row, y: float, style: Style) -> None:
     task = row.task
-    if task.milestone_date is None:
+    if task.milestone_date is None and task.start is None:
         return
 
+    ms_date = task.milestone_date or task.start
     color = row.color if row.color else style.milestone_color
-    x = mdates.date2num(task.milestone_date)
+    size = task.marker_size if task.marker_size is not None else style.milestone_size
+    x = mdates.date2num(ms_date)
 
-    diamond_half = style.bar_height * 0.55
-    diamond = plt.Polygon(
-        [
-            [x, y - diamond_half],
-            [x + diamond_half * 0.65, y],
-            [x, y + diamond_half],
-            [x - diamond_half * 0.65, y],
-        ],
-        closed=True,
-        facecolor=color,
-        edgecolor=_darken(color, 0.35),
-        linewidth=1.0,
-        zorder=5,
-    )
-    ax_bar.add_patch(diamond)
-
-    # thin vertical dashed line dropping from the diamond to x-axis
-    ax_bar.axvline(
-        x=x,
+    ax_bar.plot(
+        x, y,
+        marker="D",
+        markersize=size,
         color=color,
-        linewidth=0.7,
-        linestyle="--",
-        alpha=0.5,
-        zorder=2,
+        markeredgecolor="none",
+        zorder=5,
+        linestyle="none",
     )
+
+
+# ---------------------------------------------------------------------------
+# Dependency arrow drawing
+# ---------------------------------------------------------------------------
+
+
+def _draw_arrow(
+    ax_bar,
+    arrow: Arrow,
+    id_to_row: dict,
+    style: Style,
+) -> None:
+    """Draw a cubic-bezier S-curve from the end of one task to the start of another."""
+    from matplotlib.path import Path
+
+    from_row = id_to_row.get(arrow.from_id)
+    to_row   = id_to_row.get(arrow.to_id)
+    if from_row is None or to_row is None:
+        return
+
+    from_end  = from_row.task.effective_end
+    to_start  = to_row.task.effective_start
+    if from_end is None or to_start is None:
+        return
+
+    x0 = mdates.date2num(from_end)
+    y0 = from_row.row_index
+    x1 = mdates.date2num(to_start)
+    y1 = to_row.row_index
+
+    # S-curve: control points at mid-x, anchored horizontally at each end
+    xm = (x0 + x1) / 2.0
+    verts = [(x0, y0), (xm, y0), (xm, y1), (x1, y1)]
+    codes = [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4]
+
+    patch = mpatches.PathPatch(
+        Path(verts, codes),
+        facecolor="none",
+        edgecolor=arrow.color,
+        linewidth=1.4,
+        zorder=6,
+    )
+    ax_bar.add_patch(patch)
 
 
 # ---------------------------------------------------------------------------

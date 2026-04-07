@@ -24,21 +24,43 @@ DEFAULT_PALETTE: List[str] = [
 
 
 @dataclass
+class Arrow:
+    """A dependency arrow connecting the end of one task to the start of another."""
+
+    from_id: str
+    to_id: str
+    color: str = "#888888"
+    label: Optional[str] = None
+
+
+@dataclass
 class Task:
     """A single task (or milestone) in the Gantt chart.
 
-    ``start`` / ``end`` are explicit dates.  When absent the values are
-    derived recursively from *children* via :pymeth:`effective_start` /
-    :pymeth:`effective_end`.
+    Date resolution modes
+    ---------------------
+    1. ``start`` + ``end``   – explicit dates (original behaviour)
+    2. ``start`` + ``duration`` – ``end`` computed from ``start`` + duration
+    3. ``not_before`` + ``duration`` – ``start`` set to the ``effective_end``
+       of the task whose ``id`` matches ``not_before``, then ``end`` computed.
+
+    When absent the values are derived recursively from *children* via
+    :pymeth:`effective_start` / :pymeth:`effective_end`.
     """
 
     name: str
+    id: Optional[str] = None           # unique identifier for cross-referencing
     start: Optional[date] = None
     end: Optional[date] = None
     color: Optional[str] = None
     milestone: bool = False
     milestone_date: Optional[date] = None
     children: List["Task"] = field(default_factory=list)
+    # -- deferred-resolution fields (set by parser, consumed during resolve) --
+    not_before: Optional[str] = None   # id of task whose end becomes this start
+    duration_spec: Optional[str] = None  # raw duration string e.g. "3m", "14d"
+    marker_size: Optional[float] = None  # override milestone diamond size (pts)
+    bold: bool = False                    # render label in bold
 
     # ------------------------------------------------------------------ #
     #  Computed properties                                                 #
@@ -48,7 +70,7 @@ class Task:
     def effective_start(self) -> Optional[date]:
         """Earliest start date, resolving through children if needed."""
         if self.milestone:
-            return self.milestone_date
+            return self.milestone_date or self.start
         if self.start is not None:
             return self.start
         starts = [c.effective_start for c in self.children if c.effective_start is not None]
@@ -58,7 +80,7 @@ class Task:
     def effective_end(self) -> Optional[date]:
         """Latest end date, resolving through children if needed."""
         if self.milestone:
-            return self.milestone_date
+            return self.milestone_date or self.start
         if self.end is not None:
             return self.end
         ends = [c.effective_end for c in self.children if c.effective_end is not None]
@@ -75,9 +97,9 @@ class Style:
     """Visual style configuration for the chart."""
 
     width: float = 14.0          # figure width in inches
-    row_height: float = 0.45     # height of each row in inches
+    row_height: float = 0.3      # height of each row in inches
     bar_height: float = 0.5      # bar height as fraction of row_height
-    font_size: float = 9.0       # base font size in pts
+    font_size: float = 12.0      # base font size in pts
     indent_size: int = 3         # spaces added per depth level
     label_fraction: float = 0.28 # fraction of figure width used for labels
     colors: List[str] = field(default_factory=lambda: list(DEFAULT_PALETTE))
@@ -85,6 +107,13 @@ class Style:
     grid_color: str = "#E0E0E0"  # vertical gridline colour
     row_band_color: str = "#F5F5F5"  # alternating row band colour
     milestone_color: str = "#E65100"  # default milestone colour
+    milestone_size: float = 14.0      # default milestone diamond size (pts)
+    major_tick: Optional[str] = None  # e.g. "year", "quarter", "month", "week"
+    minor_tick: Optional[str] = None  # e.g. "quarter", "month", "week", "day"
+    major_grid_width: float = 2.0     # major gridline linewidth
+    minor_grid_width: float = 1.5     # minor gridline linewidth
+    bold_tasks: bool = True           # auto-bold top-level (depth 0) tasks
+    tick_position: str = "top"        # x-axis label position: "top", "bottom", or "both"
 
 
 @dataclass
@@ -97,3 +126,4 @@ class ChartConfig:
     start: Optional[date] = None    # force chart x-axis start
     end: Optional[date] = None      # force chart x-axis end
     style: Style = field(default_factory=Style)
+    arrows: List[Arrow] = field(default_factory=list)

@@ -1,139 +1,83 @@
 {
-  "title": "Acme Platform — 2024 Roadmap",
+  "title": "Acme Platform — 5-Year Roadmap (2024–2028)",
   "dateformat": "%Y-%m-%d",
   "style": {
-    "width": 16,
-    "row_height": 0.42,
-    "font_size": 9,
-    "indent_size": 3
+    "row_height": 0.30,
+    "font_size": 12,
+    "indent_size": 3,
+    "major_tick": "year",
+    "minor_tick": "quarter",
+    "tick_position": "both"
   },
   "tasks": [
     {
-      "name": "Q1 — Foundation",
-      "color": "#4472C4",
+      "name": "Phase 1 — Foundation", "color": "#4472C4",
       "children": [
-        {
-          "name": "Infrastructure",
-          "children": [
-            {
-              "name": "Cloud provisioning",
-              "start": "2024-01-08",
-              "end": "2024-01-26",
-              "color": "#7EA6D9"
-            },
-            {
-              "name": "CI/CD pipeline",
-              "start": "2024-01-22",
-              "end": "2024-02-09"
-            }
-          ]
-        },
-        {
-          "name": "Core API",
-          "children": [
-            {
-              "name": "Auth service",
-              "start": "2024-01-15",
-              "end": "2024-02-02"
-            },
-            {
-              "name": "Data models",
-              "start": "2024-01-22",
-              "end": "2024-02-16"
-            },
-            {
-              "name": "REST endpoints",
-              "start": "2024-02-05",
-              "end": "2024-02-29"
-            }
-          ]
-        }
+        { "name": "Infrastructure", "children": [
+            { "name": "Cloud provisioning", "start": "2024-01-08", "end": "2024-02-16" },
+            { "name": "CI/CD pipeline",     "start": "2024-02-05", "end": "2024-03-15" },
+            { "name": "Observability",      "start": "2024-03-01", "end": "2024-04-12" }
+        ]},
+        { "name": "Core API", "children": [
+            { "name": "Auth service",   "start": "2024-01-15", "end": "2024-03-01" },
+            { "name": "Data models",    "start": "2024-02-12", "end": "2024-04-05" },
+            { "name": "REST endpoints", "start": "2024-03-18", "end": "2024-05-31" }
+        ]},
+        { "name": "Foundation complete", "milestone": true, "date": "2024-06-01", "color": "#FFD700" }
       ]
     },
     {
-      "name": "Q1 foundation complete",
-      "milestone": true,
-      "date": "2024-03-01",
-      "color": "#4472C4"
-    },
-    {
-      "name": "Q2 — Product",
-      "color": "#70AD47",
+      "name": "Phase 2 — Product", "color": "#70AD47",
       "children": [
-        {
-          "name": "Web frontend",
-          "children": [
-            {
-              "name": "Design system",
-              "start": "2024-03-04",
-              "end": "2024-03-22"
-            },
-            {
-              "name": "Dashboard views",
-              "start": "2024-03-18",
-              "end": "2024-04-12"
-            },
-            {
-              "name": "Settings & admin",
-              "start": "2024-04-08",
-              "end": "2024-04-26"
-            }
-          ]
-        },
-        {
-          "name": "Mobile app",
-          "children": [
-            {
-              "name": "iOS",
-              "start": "2024-03-11",
-              "end": "2024-04-19"
-            },
-            {
-              "name": "Android",
-              "start": "2024-03-18",
-              "end": "2024-04-26"
-            }
-          ]
-        }
+        { "name": "Web frontend", "children": [
+            { "name": "Design system",    "start": "2024-06-03", "end": "2024-07-26" },
+            { "name": "Dashboard views",  "start": "2024-07-15", "end": "2024-09-27" },
+            { "name": "Settings & admin", "start": "2024-09-02", "end": "2024-11-15" }
+        ]},
+        { "name": "Mobile app", "children": [
+            { "name": "iOS",     "start": "2024-07-01", "end": "2024-10-18" },
+            { "name": "Android", "start": "2024-08-05", "end": "2024-11-29" }
+        ]},
+        { "name": "Beta release", "milestone": true, "date": "2024-12-01", "color": "#FFD700" }
       ]
     },
     {
-      "name": "Beta release",
-      "milestone": true,
-      "date": "2024-05-01",
-      "color": "#ED7D31"
-    },
-    {
-      "name": "Q3 — Hardening",
-      "color": "#ED7D31",
+      "name": "Phase 3 — Hardening", "color": "#ED7D31",
       "children": [
-        {
-          "name": "Performance tuning",
-          "start": "2024-05-06",
-          "end": "2024-06-07"
-        },
-        {
-          "name": "Security audit",
-          "start": "2024-05-13",
-          "end": "2024-05-31"
-        },
-        {
-          "name": "Load testing",
-          "start": "2024-06-03",
-          "end": "2024-06-21"
-        },
-        {
-          "name": "Bug bash",
-          "start": "2024-06-17",
-          "end": "2024-06-28"
-        }
+        { "name": "Performance tuning", "start": "2025-01-06", "end": "2025-03-14" },
+        { "name": "Security audit",     "start": "2025-02-03", "end": "2025-04-11" },
+        { "name": "Load testing",       "start": "2025-03-17", "end": "2025-05-09" },
+        { "name": "Bug bash",           "start": "2025-05-05", "end": "2025-06-27" },
+        { "name": "GA launch",          "milestone": true, "date": "2025-07-01", "color": "#FFD700" }
       ]
     },
     {
-      "name": "GA launch",
-      "milestone": true,
-      "date": "2024-07-01",
-      "color": "#FF5757"
+      "name": "Phase 4 — Scale", "color": "#9DC3E6",
+      "children": [
+        { "name": "Multi-region deployment", "start": "2025-07-07", "end": "2025-10-31" },
+        { "name": "Enterprise SSO",          "start": "2025-08-04", "end": "2025-11-28" },
+        { "name": "API v2",                  "start": "2025-10-06", "end": "2026-02-27" },
+        { "name": "Analytics platform",      "start": "2025-11-03", "end": "2026-04-10" },
+        { "name": "Scale complete",          "milestone": true, "date": "2026-04-10", "color": "#FFD700" }
+      ]
+    },
+    {
+      "name": "Phase 5 — Ecosystem", "color": "#7030A0",
+      "children": [
+        { "name": "Marketplace launch",   "start": "2026-04-06", "end": "2026-09-25" },
+        { "name": "Partner integrations", "start": "2026-07-06", "end": "2027-01-29" },
+        { "name": "SDK & docs",           "start": "2026-09-07", "end": "2027-03-26" },
+        { "name": "Platform v3",          "milestone": true, "date": "2027-04-01", "color": "#FFD700" }
+      ]
+    },
+    {
+      "name": "Phase 6 — AI & ML", "color": "#FF5757",
+      "children": [
+        { "name": "Data pipeline",        "start": "2027-04-05", "end": "2027-08-29" },
+        { "name": "Model training infra", "start": "2027-07-05", "end": "2027-12-26" },
+        { "name": "AI features (GA)",     "start": "2027-10-04", "end": "2028-06-27" },
+        { "name": "5-year vision complete", "milestone": true, "date": "2028-07-01", "color": "#FFD700" }
+      ]
     }
   ]
 }
