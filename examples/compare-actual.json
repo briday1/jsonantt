@@ -1,0 +1,69 @@
+{
+  "title": "Roadmap Comparison Demo",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "row_height": 0.34,
+    "font_size": 12,
+    "major_tick": "month",
+    "minor_tick": "week",
+    "tick_position": "both"
+  },
+  "tasks": [
+    {
+      "id": "phase-1",
+      "name": "Phase 1 - Discovery",
+      "color": "#4472C4",
+      "children": [
+        {
+          "id": "kickoff",
+          "name": "Kickoff",
+          "description": "Actual kickoff moved after final approvals.",
+          "milestone": true,
+          "date": "2024-01-10"
+        },
+        {
+          "id": "design",
+          "name": "Design",
+          "description": "Design overran by a week while requirements were clarified.",
+          "start": "2024-01-08",
+          "end": "2024-02-02"
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Phase 2 - Delivery",
+      "color": "#70AD47",
+      "children": [
+        {
+          "id": "backend",
+          "name": "Backend implementation",
+          "description": "Backend delivery slipped and ran a week longer than planned.",
+          "start": "2024-02-12",
+          "end": "2024-03-15"
+        },
+        {
+          "id": "frontend",
+          "name": "Frontend implementation",
+          "description": "Frontend scope was reduced and finished a week early.",
+          "start": "2024-02-12",
+          "end": "2024-03-01"
+        },
+        {
+          "id": "uat",
+          "name": "UAT sign-off",
+          "description": "Acceptance moved out by one week.",
+          "milestone": true,
+          "date": "2024-03-18"
+        },
+        {
+          "id": "training",
+          "name": "Ops training",
+          "description": "Added after go-live readiness concerns surfaced.",
+          "start": "2024-03-18",
+          "end": "2024-03-22"
+        }
+      ]
+    }
+  ]
+}

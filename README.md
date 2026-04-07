@@ -77,26 +77,38 @@ jsonantt -r 1 project.json project.png   # top-level tasks only
 jsonantt --renderdepth 2 project.json project.png   # include one child level
 jsonantt -t project.json project-table.png   # task name / description table
 jsonantt -t project.json project-table.csv   # CSV table export
+jsonantt agreed.json compare.png --compare actual.json   # outline vs actual compare chart
+jsonantt -t agreed.json compare-table.csv --compare actual.json   # compare table with signed offsets
+jsonantt project.json project.png --date-line today --date-line-color "#C00000"   # single target line
 ```
 
 **Python API:**
 
 ```python
-from jsonantt import load_chart, render_chart, render_table
+from jsonantt import load_chart, render_chart, render_compare_chart, render_compare_table, render_table
 
 config = load_chart("project.json")
+actual = load_chart("actual.json")
 render_chart(config, "project.png", dpi=150)
 render_chart(config, "summary.png", dpi=150, render_depth=1)
 render_table(config, "project-table.png", dpi=150)
+render_compare_chart(config, actual, "compare.png", dpi=150)
+render_compare_table(config, actual, "compare-table.csv", dpi=150)
 ```
 
 `render_depth=0` renders all nested levels. `1` renders only top-level tasks, `2` includes one level of children, and so on.
 
 `--table` / `-t` switches the output to a three-column table with `Task`, `Name`, and `Description`. The `Task` column keeps hierarchy numbering, the `Name` column stays unindented, `style.table_colorize` controls the side color accent, and `style.table_show_markers` controls whether milestone rows use a diamond marker in that gutter.
 
+Description and Name cells wrap to the measured rendered width of the column, and the row height expands to fit the wrapped lines. Very long unbroken tokens are not split mid-word, so they can still clip horizontally.
+
 `--milestones-only` works with `--table` to render only milestone rows in a dedicated milestone table. `--no-milestones` does the opposite and excludes milestones.
 
 If the table output path ends in `.csv`, `jsonantt` writes CSV instead of an image.
+
+`--compare` turns the first JSON input into the planned/agreed baseline and overlays the second JSON as the updated/actual state. In compare charts, planned bars are drawn as slightly larger unfilled outlines, actual bars are drawn normally, removed planned tasks are struck through with no actual bar, and actual-only tasks render as normal filled bars. In compare tables and CSV output, the `Offset` column shows signed duration changes like `+2d`, `-1w`, `+3mo`, or `+1y`; milestones use the signed date shift instead.
+
+Use `--date-line` to draw a single vertical reference line on chart outputs. It accepts either a date in the input file's `dateformat` or the special value `today`. Use `--date-line-color` to control its color.
 
 ---
 
@@ -142,7 +154,7 @@ If the table output path ends in `.csv`, `jsonantt` writes CSV instead of an ima
 | `bar_height` | `0.5` | Bar height as a fraction of `row_height` |
 | `font_size` | `12` | Base font size in points |
 | `indent_size` | `3` | Spaces added per depth level in labels |
-| `label_fraction` | `0.28` | Fraction of figure width used for labels |
+| `label_fraction` | `0.0` | Fraction of figure width used for labels; `0` means auto-size from measured text width |
 | `colors` | palette | Array of default hex colours cycled per top-level task |
 | `background` | `"#FFFFFF"` | Figure background colour |
 | `grid_color` | `"#E0E0E0"` | Vertical gridline colour |
@@ -180,8 +192,6 @@ See the [`examples/`](examples/) folder for ready-to-run JSON files.
 ### Render depth
 
 [`examples/renderdepth.json`](examples/renderdepth.json) — nested tasks that are useful with `-r` / `--renderdepth`
-
-This example also sets `style.number_tasks` to `false`, so indentation is preserved while task numbering is suppressed.
 
 Full depth, `render_depth=0`:
 
@@ -225,11 +235,51 @@ jsonantt -t examples/renderdepth.json examples/renderdepth-table.csv # CSV table
 
 ![color schemes](examples/colors.png)
 
+### Compare mode
+
+[`examples/compare-planned.json`](examples/compare-planned.json) and [`examples/compare-actual.json`](examples/compare-actual.json) — planned vs actual comparison with a CLI date line
+
+Compare chart:
+
+![compare chart](examples/compare.png)
+
+Compare table image:
+
+![compare table](examples/compare-table.png)
+
+CSV export:
+
+[`examples/compare-table.csv`](examples/compare-table.csv)
+
+### Description wrapping
+
+[`examples/description-wrap.json`](examples/description-wrap.json) — demonstrates normal word wrapping in table output and the edge case where a single unbroken token will not wrap
+
+Table output, `-t`:
+
+![description wrap table](examples/description-wrap-table.png)
+
+CSV export:
+
+[`examples/description-wrap-table.csv`](examples/description-wrap-table.csv)
+
 ### Complex roadmap
 
-[`examples/complex.json`](examples/complex.json) — a multi-year roadmap with deep nesting and custom colours
+[`examples/complex.json`](examples/complex.json) — a multi-year roadmap with deep nesting, task descriptions, and custom colours
 
 ![complex](examples/complex.png)
+
+Table output, `-t`:
+
+![complex table](examples/complex-table.png)
+
+Milestones only, `-t --milestones-only`:
+
+![complex milestones table](examples/complex-milestones.png)
+
+No milestones, `-t --no-milestones`:
+
+![complex no milestones table](examples/complex-no-milestones.png)
 
 
 ## How to Run
@@ -245,6 +295,14 @@ jsonantt -t --milestones-only examples/renderdepth.json examples/renderdepth-mil
 jsonantt -t --no-milestones examples/renderdepth.json examples/renderdepth-no-milestones.png # table without milestones
 jsonantt -t examples/renderdepth.json examples/renderdepth-table.csv # CSV export
 jsonantt examples/colors.json examples/colors.png                    # custom palette and background
+jsonantt examples/compare-planned.json examples/compare.png --compare examples/compare-actual.json --date-line 2024-03-01 --date-line-color "#C00000" # compare chart with target line
+jsonantt -t examples/compare-planned.json examples/compare-table.png --compare examples/compare-actual.json # compare table image
+jsonantt -t examples/compare-planned.json examples/compare-table.csv --compare examples/compare-actual.json # compare table CSV
+jsonantt -t examples/description-wrap.json examples/description-wrap-table.png # wrapped descriptions table image
+jsonantt -t examples/description-wrap.json examples/description-wrap-table.csv # wrapped descriptions CSV
 jsonantt examples/complex.json examples/complex.png                  # deep roadmap example
+jsonantt -t examples/complex.json examples/complex-table.png         # full complex table
+jsonantt -t --milestones-only examples/complex.json examples/complex-milestones.png # complex milestones only
+jsonantt -t --no-milestones examples/complex.json examples/complex-no-milestones.png # complex without milestones
 ```
 

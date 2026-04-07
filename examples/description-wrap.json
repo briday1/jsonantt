@@ -1,0 +1,55 @@
+{
+  "title": "Description Wrapping Demo",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "width": 11,
+    "font_size": 11,
+    "major_tick": "month",
+    "minor_tick": "week"
+  },
+  "tasks": [
+    {
+      "name": "Documentation refresh",
+      "description": "This description is intentionally long so the table renderer has to wrap it across multiple lines while keeping the row readable and aligned with the task hierarchy.",
+      "children": [
+        {
+          "name": "README rewrite",
+          "start": "2024-02-05",
+          "end": "2024-02-23",
+          "description": "Normal prose wraps at word boundaries. The row grows taller so the full sentence stays visible inside the Description column."
+        },
+        {
+          "name": "CLI examples",
+          "start": "2024-02-12",
+          "end": "2024-03-01",
+          "description": "Single long tokens are not split automatically, so this intentionally ridiculous identifier shows the edge case: SuperLongUnbrokenTokenThatWillNotWordWrapEvenThoughEverythingElseDoes"
+        },
+        {
+          "name": "Docs sign-off",
+          "milestone": true,
+          "date": "2024-03-04",
+          "color": "#FFD700",
+          "description": "Milestone descriptions wrap the same way as task descriptions in table mode."
+        }
+      ]
+    },
+    {
+      "name": "Release preparation",
+      "description": "A second phase makes the table more realistic and shows that wrapped rows can coexist with short rows without breaking the grid.",
+      "children": [
+        {
+          "name": "Package verification",
+          "start": "2024-03-04",
+          "end": "2024-03-15",
+          "description": "Short description."
+        },
+        {
+          "name": "Announcement draft",
+          "start": "2024-03-11",
+          "end": "2024-03-22",
+          "description": "Another longer paragraph that wraps naturally and demonstrates the intended behavior for human-written descriptions."
+        }
+      ]
+    }
+  ]
+}

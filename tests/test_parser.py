@@ -202,6 +202,7 @@ class TestParseChart:
         assert cfg.style.table_colorize is False
         assert cfg.style.table_show_markers is False
 
+
     def test_shorthand_string_task(self):
         data = {"tasks": ["Quick task"]}
         cfg = parse_chart(data)

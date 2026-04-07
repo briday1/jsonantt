@@ -6,8 +6,7 @@
     "row_height": 0.3,
     "font_size": 12,
     "major_tick": "month",
-    "minor_tick": "week",
-    "number_tasks": false
+    "minor_tick": "week"
   },
   "tasks": [
     {

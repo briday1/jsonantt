@@ -1,0 +1,8 @@
+Task,Name,Description
+1.,Documentation refresh,This description is intentionally long so the table renderer has to wrap it across multiple lines while keeping the row readable and aligned with the task hierarchy.
+1.1,README rewrite,Normal prose wraps at word boundaries. The row grows taller so the full sentence stays visible inside the Description column.
+1.2,CLI examples,"Single long tokens are not split automatically, so this intentionally ridiculous identifier shows the edge case: SuperLongUnbrokenTokenThatWillNotWordWrapEvenThoughEverythingElseDoes"
+1.3,Docs sign-off,Milestone descriptions wrap the same way as task descriptions in table mode.
+2.,Release preparation,A second phase makes the table more realistic and shows that wrapped rows can coexist with short rows without breaking the grid.
+2.1,Package verification,Short description.
+2.2,Announcement draft,Another longer paragraph that wraps naturally and demonstrates the intended behavior for human-written descriptions.

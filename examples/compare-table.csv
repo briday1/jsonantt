@@ -1,0 +1,10 @@
+Task,Name,Description,Offset
+1.,Phase 1 - Discovery,,0d
+1.1,Kickoff,Actual kickoff moved after final approvals.,+2d
+1.2,Design,Design overran by a week while requirements were clarified.,+1w
+1.3,Architecture review,Cross-team technical review planned before build starts.,Removed
+2.,Phase 2 - Delivery,,+4d
+2.1,Backend implementation,Backend delivery slipped and ran a week longer than planned.,+1w
+2.2,Frontend implementation,Frontend scope was reduced and finished a week early.,-1w
+2.3,UAT sign-off,Acceptance moved out by one week.,+1w
+2.4,(Ops training),Added after go-live readiness concerns surfaced.,Added

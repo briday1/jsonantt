@@ -117,6 +117,14 @@ jobs:
               (root / 'renderdepth.json', root / 'renderdepth-milestones.png', ['-t', '--milestones-only']),
               (root / 'renderdepth.json', root / 'renderdepth-no-milestones.png', ['-t', '--no-milestones']),
               (root / 'renderdepth.json', root / 'renderdepth-table.csv', ['-t']),
+              (root / 'compare-planned.json', root / 'compare.png', ['--compare', str(root / 'compare-actual.json'), '--date-line', '2024-03-01', '--date-line-color', '#C00000']),
+              (root / 'compare-planned.json', root / 'compare-table.png', ['-t', '--compare', str(root / 'compare-actual.json')]),
+              (root / 'compare-planned.json', root / 'compare-table.csv', ['-t', '--compare', str(root / 'compare-actual.json')]),
+              (root / 'description-wrap.json', root / 'description-wrap-table.png', ['-t']),
+              (root / 'description-wrap.json', root / 'description-wrap-table.csv', ['-t']),
+              (root / 'complex.json', root / 'complex-table.png', ['-t']),
+              (root / 'complex.json', root / 'complex-milestones.png', ['-t', '--milestones-only']),
+              (root / 'complex.json', root / 'complex-no-milestones.png', ['-t', '--no-milestones']),
           ]
 
           for json_path, png_path, extra_args in showcase_renders:

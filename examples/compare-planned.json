@@ -1,0 +1,69 @@
+{
+  "title": "Roadmap Comparison Demo",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "row_height": 0.34,
+    "font_size": 12,
+    "major_tick": "month",
+    "minor_tick": "week",
+    "tick_position": "both"
+  },
+  "tasks": [
+    {
+      "id": "phase-1",
+      "name": "Phase 1 - Discovery",
+      "color": "#4472C4",
+      "children": [
+        {
+          "id": "kickoff",
+          "name": "Kickoff",
+          "description": "Formal project start and stakeholder alignment.",
+          "milestone": true,
+          "date": "2024-01-08"
+        },
+        {
+          "id": "design",
+          "name": "Design",
+          "description": "Wireframes, flows, and implementation-ready UX.",
+          "start": "2024-01-08",
+          "end": "2024-01-26"
+        },
+        {
+          "id": "review",
+          "name": "Architecture review",
+          "description": "Cross-team technical review planned before build starts.",
+          "start": "2024-01-29",
+          "end": "2024-02-02"
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Phase 2 - Delivery",
+      "color": "#70AD47",
+      "children": [
+        {
+          "id": "backend",
+          "name": "Backend implementation",
+          "description": "API and persistence work for the agreed scope.",
+          "start": "2024-02-05",
+          "end": "2024-03-01"
+        },
+        {
+          "id": "frontend",
+          "name": "Frontend implementation",
+          "description": "UI implementation against the approved design set.",
+          "start": "2024-02-12",
+          "end": "2024-03-08"
+        },
+        {
+          "id": "uat",
+          "name": "UAT sign-off",
+          "description": "Customer acceptance checkpoint.",
+          "milestone": true,
+          "date": "2024-03-11"
+        }
+      ]
+    }
+  ]
+}
