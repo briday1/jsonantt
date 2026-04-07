@@ -9,7 +9,7 @@ import pytest
 
 from jsonantt.models import ChartConfig, Style, Task
 from jsonantt.parser import parse_chart
-from jsonantt.renderer import _darken, _flatten, _row_label_text, render_chart
+from jsonantt.renderer import _darken, _flatten, _row_label_text, _row_table_number, render_chart, render_table
 
 
 # ---------------------------------------------------------------------------
@@ -34,13 +34,15 @@ def _config_with_children() -> ChartConfig:
             "tasks": [
                 {
                     "name": "Phase 1",
+                    "description": "Plan and sequence the first delivery wave.",
                     "children": [
-                        {"name": "Sub A", "start": "2024-01-01", "end": "2024-01-15"},
-                        {"name": "Sub B", "start": "2024-01-10", "end": "2024-01-31"},
+                        {"name": "Sub A", "description": "Define scope for the first track.", "start": "2024-01-01", "end": "2024-01-15"},
+                        {"name": "Sub B", "description": "Resolve staffing and sequencing.", "start": "2024-01-10", "end": "2024-01-31"},
                     ],
                 },
                 {
                     "name": "Milestone",
+                    "description": "Decision gate for the release plan.",
                     "milestone": True,
                     "date": "2024-02-01",
                 },
@@ -165,6 +167,13 @@ class TestFlatten:
         rows = _flatten(cfg.tasks, cfg.style)
         assert _row_label_text(rows[0], cfg.style) == "Phase 1"
         assert _row_label_text(rows[1], cfg.style) == "Sub A"
+
+    def test_row_table_number_keeps_numbering(self):
+        cfg = _config_with_children()
+        cfg.style.number_tasks = False
+        rows = _flatten(cfg.tasks, cfg.style)
+        assert _row_table_number(rows[0]) == "1."
+        assert _row_table_number(rows[1]) == "1.1"
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +304,113 @@ class TestRenderChart:
         from jsonantt.parser import load_chart
         cfg = load_chart(path)
         self._render(cfg, ".png")
+
+
+class TestRenderTable:
+    def _render(self, config, suffix=".png", render_depth=0):
+        fd, path = tempfile.mkstemp(suffix=suffix)
+        os.close(fd)
+        try:
+            render_table(config, path, dpi=72, render_depth=render_depth)
+            assert os.path.exists(path)
+            assert os.path.getsize(path) > 0
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_table_png(self):
+        self._render(_config_with_children(), ".png")
+
+    def test_render_table_pdf(self):
+        self._render(_config_with_children(), ".pdf")
+
+    def test_render_table_csv(self):
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            render_table(_config_with_children(), path, dpi=72)
+            assert os.path.exists(path)
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            assert "Task,Name,Description" in content
+            assert "1.,Phase 1,Plan and sequence the first delivery wave." in content
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_table_with_limited_depth(self):
+        self._render(_config_with_children(), ".png", render_depth=1)
+
+    def test_render_table_without_colorize(self):
+        cfg = _config_with_children()
+        cfg.style.table_colorize = False
+        self._render(cfg, ".png")
+
+    def test_render_table_without_markers(self):
+        cfg = _config_with_children()
+        cfg.style.table_show_markers = False
+        self._render(cfg, ".png")
+
+    def test_render_table_without_colorize_hides_markers_too(self):
+        cfg = _config_with_children()
+        cfg.style.table_colorize = False
+        cfg.style.table_show_markers = True
+        self._render(cfg, ".png")
+
+    def test_render_milestones_only_table(self):
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            render_table(_config_with_children(), path, dpi=72, milestones_only=True)
+            assert os.path.exists(path)
+            assert os.path.getsize(path) > 0
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_milestones_only_table_raises_without_milestones(self):
+        cfg = _simple_config()
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            with pytest.raises(ValueError, match="No milestones"):
+                render_table(cfg, path, milestones_only=True)
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_no_milestones_table(self):
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            render_table(_config_with_children(), path, dpi=72, no_milestones=True)
+            assert os.path.exists(path)
+            assert os.path.getsize(path) > 0
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_no_milestones_table_raises_without_tasks(self):
+        cfg = parse_chart({"tasks": [{"name": "Launch", "milestone": True, "date": "2024-06-01"}]})
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            with pytest.raises(ValueError, match="No non-milestone tasks"):
+                render_table(cfg, path, no_milestones=True)
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_table_rejects_negative_render_depth(self):
+        cfg = _simple_config()
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            with pytest.raises(ValueError, match="render_depth must be >= 0"):
+                render_table(cfg, path, render_depth=-1)
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
 
     def test_render_example_complex(self):
         here = os.path.dirname(os.path.dirname(__file__))

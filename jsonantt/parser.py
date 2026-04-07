@@ -91,6 +91,8 @@ def _parse_style(data: Dict[str, Any]) -> Style:
         "minor_grid_width": "minor_grid_width",
         "bold_tasks": "bold_tasks",
         "number_tasks": "number_tasks",
+        "table_colorize": "table_colorize",
+        "table_show_markers": "table_show_markers",
         "tick_position": "tick_position",
     }
     for json_key, attr in mapping.items():
@@ -106,6 +108,7 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
         return Task(name=data)
 
     name: str = data.get("name", "Unnamed")
+    description: str = str(data.get("description", ""))
     task_id: Optional[str] = data.get("id", None)
     color: Optional[str] = data.get("color", None)
     milestone: bool = bool(data.get("milestone", False))
@@ -141,6 +144,7 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
 
     return Task(
         name=name,
+        description=description,
         id=task_id,
         start=start,
         end=end,

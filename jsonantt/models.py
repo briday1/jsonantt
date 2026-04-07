@@ -49,6 +49,7 @@ class Task:
     """
 
     name: str
+    description: str = ""
     id: Optional[str] = None           # unique identifier for cross-referencing
     start: Optional[date] = None
     end: Optional[date] = None
@@ -114,6 +115,8 @@ class Style:
     minor_grid_width: float = 1.5     # minor gridline linewidth
     bold_tasks: bool = True           # auto-bold top-level (depth 0) tasks
     number_tasks: bool = True         # prefix task labels with hierarchy numbers
+    table_colorize: bool = True       # show task colors in the table accent gutter
+    table_show_markers: bool = True   # draw milestone diamonds in table output
     tick_position: str = "top"        # x-axis label position: "top", "bottom", or "both"
 
 

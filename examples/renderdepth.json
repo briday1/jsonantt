@@ -12,18 +12,22 @@
   "tasks": [
     {
       "name": "Platform refresh",
+      "description": "Upgrade the delivery platform in phases while keeping the roadmap readable at different nesting levels.",
       "color": "#4472C4",
       "children": [
         {
           "name": "Architecture",
+          "description": "Shape the technical plan, define boundaries, and prepare the implementation tracks.",
           "children": [
             {
               "name": "Requirements",
+              "description": "Collect stakeholder needs and turn them into a ranked backlog.",
               "start": "2024-01-08",
               "end": "2024-01-19"
             },
             {
               "name": "System design",
+              "description": "Create the target architecture, key interfaces, and rollout constraints.",
               "start": "2024-01-22",
               "end": "2024-02-09"
             }
@@ -31,14 +35,17 @@
         },
         {
           "name": "Implementation",
+          "description": "Build the new services and user-facing workflows against the approved design.",
           "children": [
             {
               "name": "Backend services",
+              "description": "Deliver shared APIs, orchestration logic, and deployment automation.",
               "start": "2024-02-12",
               "end": "2024-03-22"
             },
             {
               "name": "Frontend UI",
+              "description": "Ship the revised screens, interaction polish, and accessibility fixes.",
               "start": "2024-02-26",
               "end": "2024-03-29"
             }
@@ -46,6 +53,7 @@
         },
         {
           "name": "Cutover",
+          "description": "Complete the switchover checklist and move production traffic to the new stack.",
           "milestone": true,
           "date": "2024-04-05"
         }
@@ -53,15 +61,18 @@
     },
     {
       "name": "Adoption",
+      "description": "Help teams absorb the platform changes through training and a measured pilot.",
       "color": "#70AD47",
       "children": [
         {
           "name": "Training",
+          "description": "Prepare enablement material and run hands-on sessions for key users.",
           "start": "2024-03-04",
           "end": "2024-03-22"
         },
         {
           "name": "Pilot",
+          "description": "Validate the rollout with a smaller cohort before broad adoption.",
           "start": "2024-03-25",
           "end": "2024-04-12"
         }

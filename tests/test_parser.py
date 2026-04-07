@@ -90,6 +90,20 @@ class TestParseChart:
         assert cfg.tasks[0].start == date(2024, 1, 1)
         assert cfg.tasks[0].end == date(2024, 1, 31)
 
+    def test_description_parsed(self):
+        data = {
+            "tasks": [
+                {
+                    "name": "Task A",
+                    "description": "Detailed summary",
+                    "start": "2024-01-01",
+                    "end": "2024-01-31",
+                }
+            ]
+        }
+        cfg = parse_chart(data)
+        assert cfg.tasks[0].description == "Detailed summary"
+
     def test_custom_date_format(self):
         data = {
             "dateformat": "%d/%m/%Y",
@@ -177,7 +191,7 @@ class TestParseChart:
 
     def test_style_parsed(self):
         data = {
-            "style": {"width": 20, "font_size": 12, "indent_size": 4, "number_tasks": False},
+            "style": {"width": 20, "font_size": 12, "indent_size": 4, "number_tasks": False, "table_colorize": False, "table_show_markers": False},
             "tasks": [],
         }
         cfg = parse_chart(data)
@@ -185,6 +199,8 @@ class TestParseChart:
         assert cfg.style.font_size == 12
         assert cfg.style.indent_size == 4
         assert cfg.style.number_tasks is False
+        assert cfg.style.table_colorize is False
+        assert cfg.style.table_show_markers is False
 
     def test_shorthand_string_task(self):
         data = {"tasks": ["Quick task"]}

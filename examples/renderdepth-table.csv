@@ -1,0 +1,12 @@
+Task,Name,Description
+1.,Platform refresh,Upgrade the delivery platform in phases while keeping the roadmap readable at different nesting levels.
+1.1,Architecture,"Shape the technical plan, define boundaries, and prepare the implementation tracks."
+1.1.1,Requirements,Collect stakeholder needs and turn them into a ranked backlog.
+1.1.2,System design,"Create the target architecture, key interfaces, and rollout constraints."
+1.2,Implementation,Build the new services and user-facing workflows against the approved design.
+1.2.1,Backend services,"Deliver shared APIs, orchestration logic, and deployment automation."
+1.2.2,Frontend UI,"Ship the revised screens, interaction polish, and accessibility fixes."
+1.3,Cutover,Complete the switchover checklist and move production traffic to the new stack.
+2.,Adoption,Help teams absorb the platform changes through training and a measured pilot.
+2.1,Training,Prepare enablement material and run hands-on sessions for key users.
+2.2,Pilot,Validate the rollout with a smaller cohort before broad adoption.

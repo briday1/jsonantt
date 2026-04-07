@@ -110,27 +110,30 @@ jobs:
                   check=True,
               )
 
-                showcase_renders = [
-                  (root / 'renderdepth.json', root / 'renderdepth-top.png', 1),
-                  (root / 'renderdepth.json', root / 'renderdepth-mid.png', 2),
-                ]
+          showcase_renders = [
+              (root / 'renderdepth.json', root / 'renderdepth-top.png', ['-r', '1']),
+              (root / 'renderdepth.json', root / 'renderdepth-mid.png', ['-r', '2']),
+              (root / 'renderdepth.json', root / 'renderdepth-table.png', ['-t']),
+              (root / 'renderdepth.json', root / 'renderdepth-milestones.png', ['-t', '--milestones-only']),
+              (root / 'renderdepth.json', root / 'renderdepth-no-milestones.png', ['-t', '--no-milestones']),
+              (root / 'renderdepth.json', root / 'renderdepth-table.csv', ['-t']),
+          ]
 
-                for json_path, png_path, render_depth in showcase_renders:
-                  print(f'Rendering {json_path} -> {png_path} with render depth {render_depth}')
-                  subprocess.run(
-                    [
+          for json_path, png_path, extra_args in showcase_renders:
+              print(f"Rendering {json_path} -> {png_path} with args {extra_args}")
+              subprocess.run(
+                  [
                       sys.executable,
                       '-m',
                       'jsonantt.cli',
-                      '-r',
-                      str(render_depth),
+                      *extra_args,
                       str(json_path),
                       str(png_path),
                       '--dpi',
                       '150',
-                    ],
-                    check=True,
-                  )
+                  ],
+                  check=True,
+              )
           PYTHON_EOF
 
       - name: Commit rendered example PNGs

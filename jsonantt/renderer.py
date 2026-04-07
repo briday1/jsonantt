@@ -1,7 +1,10 @@
 """matplotlib-based Gantt chart renderer for jsonantt."""
 from __future__ import annotations
 
+import csv
 import math
+import os
+import textwrap
 from datetime import date, datetime, timedelta
 from typing import List, Optional, Tuple
 
@@ -12,7 +15,10 @@ import matplotlib.patches as mpatches
 import matplotlib.ticker as ticker
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.font_manager import FontProperties
 from matplotlib.figure import Figure
+from matplotlib.text import Text
 
 from .models import Arrow, ChartConfig, Style, Task
 
@@ -46,12 +52,7 @@ def render_chart(
     render_depth: int = 0,
 ) -> None:
     """Render *config* to *output_path* (PNG, PDF, SVG …)."""
-    if render_depth < 0:
-        raise ValueError("render_depth must be >= 0")
-
-    rows = _flatten(config.tasks, config.style, max_depth=render_depth)
-    if not rows:
-        raise ValueError("No tasks to render.")
+    rows = _prepare_rows(config, render_depth)
 
     n = len(rows)
     style = config.style
@@ -166,6 +167,225 @@ def render_chart(
 
     fig.savefig(output_path, dpi=dpi, bbox_inches="tight",
                 facecolor=style.background)
+    plt.close(fig)
+
+
+def render_table(
+    config: ChartConfig,
+    output_path: str,
+    dpi: int = 150,
+    render_depth: int = 0,
+    milestones_only: bool = False,
+    no_milestones: bool = False,
+) -> None:
+    """Render *config* to *output_path* as a task table image."""
+    rows = _prepare_rows(config, render_depth)
+    rows = _filter_rows_for_table(rows, milestones_only, no_milestones)
+    style = config.style
+
+    if os.path.splitext(output_path)[1].lower() == ".csv":
+        _write_table_csv(rows, output_path)
+        return
+
+    fig_w = style.width
+    char_width_in = style.font_size * 0.55 / 72.0
+    line_height_in = style.font_size * 1.5 / 72.0
+    table_width_frac = 0.94
+    table_width_in = fig_w * table_width_frac
+    gutter_width_frac = 0.018
+    gutter_gap_in = 0.05
+    text_pad_frac = 0.014
+    text_pad_in = table_width_in * text_pad_frac
+    col_padding_in = text_pad_in * 2 + 0.05
+    min_desc_width_in = max(4.0, table_width_in * 0.45)
+    has_table_gutter = style.table_colorize
+    gutter_width_in = table_width_in * gutter_width_frac if has_table_gutter else 0.0
+
+    font_props = FontProperties(size=style.font_size, weight="normal")
+    bold_font_props = FontProperties(size=style.font_size, weight="bold")
+    number_width_in = max(
+        0.55,
+        _max_text_width_in([_row_table_number(row) for row in rows], font_props) + col_padding_in,
+    )
+    if has_table_gutter:
+        number_width_in += gutter_width_in + gutter_gap_in
+    name_width_in = max(
+        1.6,
+        max(
+            _measure_text_width_in(
+                row.task.name,
+                bold_font_props if (row.task.bold or (style.bold_tasks and row.depth == 0)) else font_props,
+            )
+            for row in rows
+        ) + col_padding_in,
+    )
+
+    max_non_desc_width = max(2.6, table_width_in - min_desc_width_in)
+    non_desc_width = number_width_in + name_width_in
+    if non_desc_width > max_non_desc_width:
+        overflow = non_desc_width - max_non_desc_width
+        reducible_name = max(0.0, name_width_in - 1.6)
+        reduction = min(overflow, reducible_name)
+        name_width_in -= reduction
+        overflow -= reduction
+        if overflow > 0:
+            reducible_number = max(0.0, number_width_in - 0.55)
+            number_width_in -= min(overflow, reducible_number)
+
+    desc_width_in = max(2.6, table_width_in - number_width_in - name_width_in)
+
+    task_num_fraction = number_width_in / table_width_in
+    name_col_fraction = name_width_in / table_width_in
+    desc_col_fraction = desc_width_in / table_width_in
+
+    number_wrap_chars = max(4, int((number_width_in - col_padding_in) / char_width_in))
+    desc_wrap_chars = max(28, int((desc_width_in - col_padding_in) / char_width_in))
+
+    wrapped_rows = []
+    total_units = 1.3  # header row
+    for row in rows:
+        number_lines = _wrap_text(_row_table_number(row), number_wrap_chars)
+        row_font_props = bold_font_props if (row.task.bold or (style.bold_tasks and row.depth == 0)) else font_props
+        name_lines = _wrap_text_measured(row.task.name, name_width_in - col_padding_in, row_font_props)
+        desc_lines = _wrap_text_measured(row.task.description, desc_width_in - col_padding_in, font_props)
+        line_count = max(len(number_lines), len(name_lines), len(desc_lines), 1)
+        row_units = line_count + 0.6
+        wrapped_rows.append((row, number_lines, name_lines, desc_lines, row_units))
+        total_units += row_units
+
+    fig_h = total_units * line_height_in + (0.8 if config.title else 0.35)
+    fig = plt.figure(figsize=(fig_w, fig_h), facecolor=style.background)
+    top_margin = 0.88 if config.title else 0.96
+    ax = fig.add_axes([0.03, 0.05, 0.94, top_margin - 0.08])
+    ax.set_xlim(0, 1)
+    ax.set_ylim(total_units, 0)
+    ax.axis("off")
+    ax.set_facecolor(style.background)
+
+    if config.title:
+        fig.suptitle(
+            config.title,
+            fontsize=style.font_size + 3,
+            fontweight="bold",
+            x=0.5,
+            y=0.97,
+            va="top",
+            ha="center",
+        )
+
+    header_color = _darken(style.row_band_color, 0.08)
+    divider_color = style.grid_color
+    gutter_width = gutter_width_frac if has_table_gutter else 0.0
+    task_x_end = task_num_fraction
+    name_x_end = task_num_fraction + name_col_fraction
+    desc_x_start = name_x_end
+
+    ax.add_patch(mpatches.Rectangle(
+        (0, 0), task_x_end, 1.3,
+        facecolor=header_color,
+        edgecolor=divider_color,
+        linewidth=1.0,
+    ))
+    ax.add_patch(mpatches.Rectangle(
+        (task_x_end, 0), name_col_fraction, 1.3,
+        facecolor=header_color,
+        edgecolor=divider_color,
+        linewidth=1.0,
+    ))
+    ax.add_patch(mpatches.Rectangle(
+        (desc_x_start, 0), desc_col_fraction, 1.3,
+        facecolor=header_color,
+        edgecolor=divider_color,
+        linewidth=1.0,
+    ))
+    ax.text(text_pad_frac, 0.65, "Task", ha="left", va="center", fontsize=style.font_size, fontweight="bold")
+    ax.text(task_x_end + text_pad_frac, 0.65, "Name", ha="left", va="center", fontsize=style.font_size, fontweight="bold")
+    ax.text(desc_x_start + text_pad_frac, 0.65, "Description", ha="left", va="center", fontsize=style.font_size, fontweight="bold")
+
+    y = 1.3
+    for row_index, (row, number_lines, name_lines, desc_lines, row_units) in enumerate(wrapped_rows):
+        band_color = style.background if row_index % 2 == 0 else style.row_band_color
+
+        ax.add_patch(mpatches.Rectangle(
+            (0, y), 1.0, row_units,
+            facecolor=band_color,
+            edgecolor=divider_color,
+            linewidth=0.8,
+        ))
+        show_milestone_marker = row.task.milestone and style.table_colorize and style.table_show_markers
+        if style.table_colorize and not show_milestone_marker:
+            ax.add_patch(mpatches.Rectangle(
+                (0, y), 0.010, row_units,
+                facecolor=row.color,
+                edgecolor="none",
+            ))
+        if show_milestone_marker:
+            marker_x = gutter_width / 2.0
+            marker_y = y + row_units / 2.0
+            marker_color = row.color if row.color else style.milestone_color
+            ax.plot(
+                marker_x,
+                marker_y,
+                marker="D",
+                markersize=max(6, style.milestone_size * 0.65),
+                color=marker_color,
+                markeredgecolor="none",
+                linestyle="none",
+                zorder=4,
+            )
+
+        ax.plot([task_x_end, task_x_end], [y, y + row_units], color=divider_color, linewidth=1.0)
+        ax.plot([name_x_end, name_x_end], [y, y + row_units], color=divider_color, linewidth=1.0)
+
+        text_y = y + row_units / 2.0
+        task_weight = "bold" if (row.task.bold or (style.bold_tasks and row.depth == 0)) else "normal"
+        number_clip = mpatches.Rectangle((0, y), task_x_end, row_units, transform=ax.transData)
+        name_clip = mpatches.Rectangle((task_x_end, y), name_col_fraction, row_units, transform=ax.transData)
+        desc_clip = mpatches.Rectangle((desc_x_start, y), desc_col_fraction, row_units, transform=ax.transData)
+
+        number_text = ax.text(
+            max(text_pad_frac, gutter_width + 0.006),
+            text_y,
+            "\n".join(number_lines),
+            ha="left",
+            va="center",
+            fontsize=style.font_size,
+            fontweight=task_weight,
+            color="#111111",
+            linespacing=1.35,
+            clip_on=True,
+        )
+        number_text.set_clip_path(number_clip)
+
+        name_text = ax.text(
+            task_x_end + text_pad_frac,
+            text_y,
+            "\n".join(name_lines),
+            ha="left",
+            va="center",
+            fontsize=style.font_size,
+            fontweight=task_weight,
+            color="#111111",
+            linespacing=1.35,
+            clip_on=True,
+        )
+        name_text.set_clip_path(name_clip)
+
+        desc_text = ax.text(
+            desc_x_start + text_pad_frac,
+            text_y,
+            "\n".join(desc_lines),
+            ha="left",
+            va="center",
+            fontsize=style.font_size,
+            color="#111111",
+            linespacing=1.35,
+            clip_on=True,
+        )
+        desc_text.set_clip_path(desc_clip)
+        y += row_units
+
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor=style.background)
     plt.close(fig)
 
 
@@ -289,6 +509,50 @@ def _flatten(
         r.row_index = i
 
     return rows
+
+
+def _prepare_rows(config: ChartConfig, render_depth: int) -> List[_Row]:
+    """Validate depth and return flattened rows for rendering."""
+    if render_depth < 0:
+        raise ValueError("render_depth must be >= 0")
+
+    rows = _flatten(config.tasks, config.style, max_depth=render_depth)
+    if not rows:
+        raise ValueError("No tasks to render.")
+    return rows
+
+
+def _filter_rows_for_table(
+    rows: List[_Row],
+    milestones_only: bool,
+    no_milestones: bool,
+) -> List[_Row]:
+    """Return rows for table output, applying milestone filters."""
+    if milestones_only and no_milestones:
+        raise ValueError("Cannot use milestones_only and no_milestones together.")
+
+    if milestones_only:
+        filtered_rows = [row for row in rows if row.task.milestone]
+        if not filtered_rows:
+            raise ValueError("No milestones to render.")
+        return filtered_rows
+
+    if no_milestones:
+        filtered_rows = [row for row in rows if not row.task.milestone]
+        if not filtered_rows:
+            raise ValueError("No non-milestone tasks to render.")
+        return filtered_rows
+
+    return rows
+
+
+def _write_table_csv(rows: List[_Row], output_path: str) -> None:
+    """Write table rows to *output_path* as CSV."""
+    with open(output_path, "w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["Task", "Name", "Description"])
+        for row in rows:
+            writer.writerow([_row_table_number(row), row.task.name, row.task.description])
 
 
 # ---------------------------------------------------------------------------
@@ -508,6 +772,73 @@ def _row_label_text(row: _Row, style: Style) -> str:
 
     number_str = row.number + "." if "." not in row.number else row.number
     return number_str + "  " + row.task.name
+
+
+def _row_table_number(row: _Row) -> str:
+    """Return the numbering shown in the table Task column."""
+    return row.number + "." if "." not in row.number else row.number
+
+
+def _wrap_text(text: str, width: int) -> List[str]:
+    """Wrap *text* to approximately *width* characters per line."""
+    if not text:
+        return [""]
+
+    lines: List[str] = []
+    for paragraph in str(text).splitlines():
+        wrapped = textwrap.wrap(
+            paragraph,
+            width=max(8, width),
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+        lines.extend(wrapped or [""])
+    return lines or [""]
+
+
+def _wrap_text_measured(text: str, width_in: float, font_properties: FontProperties) -> List[str]:
+    """Wrap *text* to *width_in* inches using measured text widths."""
+    if not text:
+        return [""]
+
+    if width_in <= 0:
+        return [str(text)]
+
+    lines: List[str] = []
+    for paragraph in str(text).splitlines():
+        words = paragraph.split()
+        if not words:
+            lines.append("")
+            continue
+
+        current = words[0]
+        for word in words[1:]:
+            candidate = current + " " + word
+            if _measure_text_width_in(candidate, font_properties) <= width_in:
+                current = candidate
+            else:
+                lines.append(current)
+                current = word
+        lines.append(current)
+    return lines or [""]
+
+
+def _measure_text_width_in(text: str, font_properties: FontProperties) -> float:
+    """Measure *text* width in inches using matplotlib's text renderer."""
+    fig = Figure(figsize=(1, 1), dpi=100)
+    canvas = FigureCanvasAgg(fig)
+    renderer = canvas.get_renderer()
+    text_artist = Text(0, 0, text, fontproperties=font_properties)
+    text_artist.set_figure(fig)
+    bbox = text_artist.get_window_extent(renderer=renderer)
+    return bbox.width / fig.dpi
+
+
+def _max_text_width_in(values: List[str], font_properties: FontProperties) -> float:
+    """Return the maximum measured width in inches across *values*."""
+    if not values:
+        return 0.0
+    return max(_measure_text_width_in(value, font_properties) for value in values)
 
 
 # ---------------------------------------------------------------------------

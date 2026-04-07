@@ -5,15 +5,17 @@ import argparse
 import sys
 
 from .parser import load_chart
-from .renderer import render_chart
+from .renderer import render_chart, render_table
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="jsonantt",
         description=(
-            "Generate a Gantt chart image from a JSON description.\n\n"
-            "Example:\n  jsonantt project.json chart.png\n  jsonantt project.json chart.pdf"
+            "Generate a Gantt chart or task table image from a JSON description.\n\n"
+            "Examples:\n"
+            "  jsonantt project.json chart.png\n"
+            "  jsonantt -t project.json task-table.png"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -32,6 +34,22 @@ def main(argv=None) -> int:
             "top-level tasks, 2 includes one level of children, and so on"
         ),
     )
+    parser.add_argument(
+        "-t", "--table",
+        action="store_true",
+        help="Render a task table instead of a Gantt chart",
+    )
+    milestone_group = parser.add_mutually_exclusive_group()
+    milestone_group.add_argument(
+        "--milestones-only",
+        action="store_true",
+        help="When used with --table, render only milestone rows",
+    )
+    milestone_group.add_argument(
+        "--no-milestones",
+        action="store_true",
+        help="When used with --table, exclude milestone rows",
+    )
 
     args = parser.parse_args(argv)
 
@@ -45,12 +63,23 @@ def main(argv=None) -> int:
         return 1
 
     try:
-        render_chart(config, args.output, dpi=args.dpi, render_depth=args.renderdepth)
+        render_fn = render_table if args.table else render_chart
+        render_kwargs = {"dpi": args.dpi, "render_depth": args.renderdepth}
+        if args.table:
+            render_kwargs["milestones_only"] = args.milestones_only
+            render_kwargs["no_milestones"] = args.no_milestones
+        elif args.milestones_only:
+            raise ValueError("--milestones-only requires --table")
+        elif args.no_milestones:
+            raise ValueError("--no-milestones requires --table")
+        render_fn(config, args.output, **render_kwargs)
     except Exception as exc:  # noqa: BLE001
-        print(f"error: failed to render chart: {exc}", file=sys.stderr)
+        target = "table" if args.table else "chart"
+        print(f"error: failed to render {target}: {exc}", file=sys.stderr)
         return 1
 
-    print(f"Chart saved to {args.output}")
+    target = "Table" if args.table else "Chart"
+    print(f"{target} saved to {args.output}")
     return 0
 
 
