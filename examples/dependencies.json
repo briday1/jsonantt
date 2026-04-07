@@ -67,9 +67,25 @@
     }
   ],
   "arrows": [
-    { "from": "design",   "to": "backend",  "color": "#4472C4" },
-    { "from": "design",   "to": "frontend", "color": "#4472C4" },
-    { "from": "backend",  "to": "qa",       "color": "#70AD47" },
-    { "from": "qa",       "to": "launch",   "color": "#FF5757" }
+    {
+      "from": "design",
+      "to": "backend",
+      "color": "#4472C4"
+    },
+    {
+      "from": "design",
+      "to": "frontend",
+      "color": "#4472C4"
+    },
+    {
+      "from": "backend",
+      "to": "qa",
+      "color": "#70AD47"
+    },
+    {
+      "from": "qa",
+      "to": "launch",
+      "color": "#FF5757"
+    }
   ]
 }
