@@ -4,6 +4,7 @@
     "row_height": 0.3,
     "font_size": 12,
     "indent_size": 3,
+    "subtask_lightening_pct": 25,
     "major_tick": "year",
     "minor_tick": "quarter",
     "tick_position": "both"
