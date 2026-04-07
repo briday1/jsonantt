@@ -1,0 +1,88 @@
+name: Publish to PyPI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Version, build, and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate version from PyPI
+        id: set-version
+        run: |
+          NEXT_VERSION=$(python3 << 'PYTHON_EOF'
+          import requests
+          import re
+          import sys
+          from datetime import datetime
+
+          year = datetime.now().year
+          year_pattern = re.compile(rf'^{year}\.(\d+)')
+          nums = []
+
+          try:
+              r = requests.get('https://pypi.org/pypi/jsonantt/json', timeout=10)
+              if r.status_code == 200:
+                  for v in r.json().get('releases', {}).keys():
+                      m = year_pattern.match(v)
+                      if m:
+                          nums.append(int(m.group(1)))
+          except Exception as e:
+              print(f"PyPI check failed: {e}", file=sys.stderr)
+
+          next_num = max(nums) + 1 if nums else 1
+          print(f"{year}.{next_num}")
+          PYTHON_EOF
+          )
+          echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $NEXT_VERSION"
+
+      - name: Update pyproject.toml
+        run: |
+          VERSION="${{ steps.set-version.outputs.version }}"
+          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+          echo "Updated version:"
+          grep "^version" pyproject.toml
+
+      - name: Commit version bump and tag
+        run: |
+          VERSION="${{ steps.set-version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "chore: bump version to $VERSION [skip ci]" || echo "No changes to commit"
+          git fetch --tags
+          if git ls-remote --tags origin | grep -q "refs/tags/v$VERSION$"; then
+            echo "Tag v$VERSION already exists, skipping"
+          else
+            git tag -a "v$VERSION" -m "Release v$VERSION"
+            git push origin "v$VERSION" || echo "Tag push failed"
+          fi
+          git push origin main || echo "Nothing to push"
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build distribution
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
