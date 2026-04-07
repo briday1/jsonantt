@@ -11,6 +11,7 @@
     "grid_color": "#C9B89A",
     "row_band_color": "#EFE7D7",
     "milestone_color": "#8C2F39",
+    "milestone_marker": "s",
     "colors": [
       "#264653",
       "#2A9D8F",
@@ -48,7 +49,8 @@
     {
       "name": "Launch review",
       "milestone": true,
-      "date": "2024-04-05"
+      "date": "2024-04-05",
+      "marker": "*"
     }
   ]
 }

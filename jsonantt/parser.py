@@ -84,6 +84,7 @@ def _parse_style(data: Dict[str, Any]) -> Style:
         "grid_color": "grid_color",
         "row_band_color": "row_band_color",
         "milestone_color": "milestone_color",
+        "milestone_marker": "milestone_marker",
         "milestone_size": "milestone_size",
         "major_tick": "major_tick",
         "minor_tick": "minor_tick",
@@ -114,6 +115,7 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
     milestone: bool = bool(data.get("milestone", False))
     not_before: Optional[str] = data.get("not_before", None)
     marker_size: Optional[float] = float(data["marker_size"]) if "marker_size" in data else None
+    marker: Optional[str] = str(data["marker"]) if "marker" in data else None
     bold: bool = bool(data.get("bold", False))
 
     # duration may be an integer (days) or a string like "3m", "2y", "14d"
@@ -155,6 +157,7 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
         not_before=not_before,
         duration_spec=duration_spec,
         marker_size=marker_size,
+        marker=marker,
         bold=bold,
     )
 

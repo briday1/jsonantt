@@ -191,7 +191,7 @@ class TestParseChart:
 
     def test_style_parsed(self):
         data = {
-            "style": {"width": 20, "font_size": 12, "indent_size": 4, "number_tasks": False, "table_colorize": False, "table_show_markers": False},
+            "style": {"width": 20, "font_size": 12, "indent_size": 4, "number_tasks": False, "table_colorize": False, "table_show_markers": False, "milestone_color": "#FFFF00", "milestone_marker": "o"},
             "tasks": [],
         }
         cfg = parse_chart(data)
@@ -201,6 +201,17 @@ class TestParseChart:
         assert cfg.style.number_tasks is False
         assert cfg.style.table_colorize is False
         assert cfg.style.table_show_markers is False
+        assert cfg.style.milestone_color == "#FFFF00"
+        assert cfg.style.milestone_marker == "o"
+
+    def test_task_marker_override_parsed(self):
+        data = {
+            "tasks": [
+                {"name": "Go live", "milestone": True, "date": "2024-07-01", "marker": "*"}
+            ]
+        }
+        cfg = parse_chart(data)
+        assert cfg.tasks[0].marker == "*"
 
 
     def test_shorthand_string_task(self):

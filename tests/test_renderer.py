@@ -15,6 +15,8 @@ from jsonantt.renderer import (
     _darken,
     _flatten,
     _format_compare_offset,
+    _milestone_color,
+    _milestone_marker,
     _prepare_compare_rows,
     _row_label_text,
     _row_table_number,
@@ -164,6 +166,56 @@ class TestFlatten:
         child_color = rows[1].color
         assert parent_color == "#112233"
         assert child_color == "#112233"
+
+    def test_default_milestone_color_is_yellow(self):
+        cfg = parse_chart({"tasks": [{"name": "M", "milestone": True, "date": "2024-01-01"}]})
+        assert cfg.style.milestone_color == "#FFD700"
+
+    def test_default_milestone_marker_is_diamond(self):
+        cfg = parse_chart({"tasks": [{"name": "M", "milestone": True, "date": "2024-01-01"}]})
+        assert cfg.style.milestone_marker == "D"
+
+    def test_milestone_uses_style_color_not_inherited_parent_color(self):
+        cfg = parse_chart(
+            {
+                "tasks": [
+                    {
+                        "name": "Parent",
+                        "color": "#112233",
+                        "children": [
+                            {"name": "Release", "milestone": True, "date": "2024-01-10"}
+                        ],
+                    }
+                ]
+            }
+        )
+        rows = _flatten(cfg.tasks, cfg.style)
+        milestone_row = rows[1]
+        assert milestone_row.color == "#112233"
+        assert _milestone_color(milestone_row, cfg.style) == "#FFD700"
+
+    def test_milestone_task_color_overrides_style_color(self):
+        cfg = parse_chart(
+            {
+                "tasks": [
+                    {"name": "Release", "milestone": True, "date": "2024-01-10", "color": "#00FF00"}
+                ]
+            }
+        )
+        row = _flatten(cfg.tasks, cfg.style)[0]
+        assert _milestone_color(row, cfg.style) == "#00FF00"
+
+    def test_milestone_task_marker_overrides_style_marker(self):
+        cfg = parse_chart(
+            {
+                "style": {"milestone_marker": "o"},
+                "tasks": [
+                    {"name": "Release", "milestone": True, "date": "2024-01-10", "marker": "*"}
+                ]
+            }
+        )
+        row = _flatten(cfg.tasks, cfg.style)[0]
+        assert _milestone_marker(row.task, cfg.style) == "*"
 
     def test_render_depth_zero_includes_all_levels(self):
         cfg = _config_with_children()

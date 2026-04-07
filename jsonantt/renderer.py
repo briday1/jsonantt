@@ -23,6 +23,16 @@ from matplotlib.text import Text
 
 from .models import Arrow, ChartConfig, Style, Task
 
+
+def _milestone_marker(task: Task, style: Style) -> str:
+    """Return the marker symbol for a milestone, preferring task override."""
+    return task.marker if task.marker else style.milestone_marker
+
+
+def _milestone_color(row: _Row, style: Style) -> str:
+    """Return the milestone color for a row, preferring task color override."""
+    return row.task.color if row.task.color else style.milestone_color
+
 # ---------------------------------------------------------------------------
 # Internal helper types
 # ---------------------------------------------------------------------------
@@ -360,11 +370,11 @@ def render_table(
         if show_milestone_marker:
             marker_x = gutter_width / 2.0
             marker_y = y + row_units / 2.0
-            marker_color = row.color if row.color else style.milestone_color
+            marker_color = _milestone_color(row, style)
             ax.plot(
                 marker_x,
                 marker_y,
-                marker="D",
+                marker=_milestone_marker(row.task, style),
                 markersize=max(6, style.milestone_size * 0.65),
                 color=marker_color,
                 markeredgecolor="none",
@@ -676,9 +686,9 @@ def render_compare_table(
             ax.plot(
                 marker_x,
                 marker_y,
-                marker="D",
+                marker=_milestone_marker(row.task, style),
                 markersize=max(6, style.milestone_size * 0.65),
-                color=accent_color if accent_color else style.milestone_color,
+                color=_milestone_color(row.actual if row.actual is not None else row.planned, style),
                 markeredgecolor="none",
                 linestyle="none",
                 zorder=4,
@@ -1336,13 +1346,14 @@ def _draw_milestone(ax_bar, row: _Row, y: float, style: Style) -> None:
         return
 
     ms_date = task.milestone_date or task.start
-    color = row.color if row.color else style.milestone_color
+    color = _milestone_color(row, style)
+    marker = _milestone_marker(task, style)
     size = task.marker_size if task.marker_size is not None else style.milestone_size
     x = mdates.date2num(ms_date)
 
     ax_bar.plot(
         x, y,
-        marker="D",
+        marker=marker,
         markersize=size,
         color=color,
         markeredgecolor="none",
@@ -1358,14 +1369,15 @@ def _draw_compare_milestone(ax_bar, row: _Row, y: float, style: Style, outlined:
         return
 
     ms_date = task.milestone_date or task.start
-    color = row.color if row.color else style.milestone_color
+    color = _milestone_color(row, style)
+    marker = _milestone_marker(task, style)
     size = task.marker_size if task.marker_size is not None else style.milestone_size
     x = mdates.date2num(ms_date)
 
     ax_bar.plot(
         x,
         y,
-        marker="D",
+        marker=marker,
         markersize=size * (1.22 if outlined else 1.0),
         markerfacecolor="none" if outlined else color,
         markeredgecolor=color,

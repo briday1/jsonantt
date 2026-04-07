@@ -9,7 +9,7 @@ Charts are rendered with [matplotlib](https://matplotlib.org/) so they can be sa
 
 - **Infinitely nestable tasks** — define sub-tasks, sub-sub-tasks, etc.
 - **Auto date computation** — parent task start/end are derived automatically from children when not specified.
-- **Milestone markers** — easy `"milestone": true` flag renders a distinctive diamond.
+- **Milestone markers** — easy `"milestone": true` flag with chart-level defaults and per-milestone marker overrides.
 - **Optional task descriptions** — add long-form context per task for table-style output.
 - **Fully colourable** — set colours per-task; children inherit their parent's colour.
 - **Clean, indented y-axis labels** — task names are left-aligned with proper indentation per depth level.
@@ -42,6 +42,10 @@ pip install -e .
 {
   "title": "My Project",
   "dateformat": "%Y-%m-%d",
+  "style": {
+    "milestone_color": "#FFD700",
+    "milestone_marker": "D"
+  },
   "tasks": [
     {
       "name": "Phase 1 – Planning",
@@ -134,9 +138,10 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 | `end` | date string | Bar end date |
 | `duration` | string or int | Duration from `start` (or resolved `not_before` end): `"14d"`, `"2w"`, `"3m"`, `"2y"`, or a plain integer (days) |
 | `not_before` | string | `id` of another task — this task starts immediately after that task ends |
-| `color` | CSS hex string | Bar/milestone colour (e.g. `"#4472C4"`) |
+| `color` | CSS hex string | Bar colour, or milestone colour override for an individual milestone (e.g. `"#4472C4"`) |
 | `milestone` | boolean | Render as a diamond milestone instead of a bar |
 | `date` | date string | Milestone date (used when `milestone: true`) |
+| `marker` | string | Milestone marker override for an individual milestone (matplotlib marker symbol such as `"D"`, `"o"`, `"s"`, `"*"`) |
 | `marker_size` | number | Override milestone diamond size in points |
 | `bold` | boolean | Render label in bold (top-level tasks are auto-bolded by default) |
 | `children` | array | Nested sub-tasks (infinitely nestable) |
@@ -159,8 +164,9 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 | `background` | `"#FFFFFF"` | Figure background colour |
 | `grid_color` | `"#E0E0E0"` | Vertical gridline colour |
 | `row_band_color` | `"#F5F5F5"` | Alternating row band colour |
-| `milestone_color` | `"#E65100"` | Default milestone colour |
-| `milestone_size` | `14` | Default milestone diamond size in points |
+| `milestone_color` | `"#FFD700"` | Default milestone colour |
+| `milestone_marker` | `"D"` | Default milestone marker symbol |
+| `milestone_size` | `14` | Default milestone marker size in points |
 | `major_tick` | `null` | Major tick unit: `"year"`, `"quarter"`, `"month"`, `"week"` |
 | `minor_tick` | `null` | Minor tick unit: `"quarter"`, `"month"`, `"week"`, `"day"` |
 | `major_grid_width` | `2.0` | Major gridline linewidth |
@@ -231,7 +237,7 @@ jsonantt -t examples/renderdepth.json examples/renderdepth-table.csv # CSV table
 
 ### Color schemes
 
-[`examples/colors.json`](examples/colors.json) — custom palette, background, grid, row band, and milestone colours
+[`examples/colors.json`](examples/colors.json) — custom palette, background, grid, row band, milestone colours, and custom milestone markers
 
 ![color schemes](examples/colors.png)
 

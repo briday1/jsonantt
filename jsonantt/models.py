@@ -61,6 +61,7 @@ class Task:
     not_before: Optional[str] = None   # id of task whose end becomes this start
     duration_spec: Optional[str] = None  # raw duration string e.g. "3m", "14d"
     marker_size: Optional[float] = None  # override milestone diamond size (pts)
+    marker: Optional[str] = None         # override milestone marker symbol
     bold: bool = False                    # render label in bold
 
     # ------------------------------------------------------------------ #
@@ -107,8 +108,9 @@ class Style:
     background: str = "#FFFFFF"  # figure background colour
     grid_color: str = "#E0E0E0"  # vertical gridline colour
     row_band_color: str = "#F5F5F5"  # alternating row band colour
-    milestone_color: str = "#E65100"  # default milestone colour
-    milestone_size: float = 14.0      # default milestone diamond size (pts)
+    milestone_color: str = "#FFD700"  # default milestone colour
+    milestone_marker: str = "D"       # default milestone marker symbol
+    milestone_size: float = 14.0       # default milestone marker size (pts)
     major_tick: Optional[str] = None  # e.g. "year", "quarter", "month", "week"
     minor_tick: Optional[str] = None  # e.g. "quarter", "month", "week", "day"
     major_grid_width: float = 2.0     # major gridline linewidth
