@@ -12,6 +12,7 @@ Charts are rendered with [matplotlib](https://matplotlib.org/) so they can be sa
 - **Milestone markers** — easy `"milestone": true` flag with chart-level defaults and per-milestone marker overrides.
 - **Optional task descriptions** — add long-form context per task for table-style output.
 - **Fully colourable** — set colours per-task; children inherit their parent's colour.
+- **Recursive child colour lightening** — inherited subtask colours can optionally lighten at each nested level.
 - **Clean, indented y-axis labels** — task names are left-aligned with proper indentation per depth level.
 - **Table output mode** — render a task summary table with the same hierarchy and colour cues.
 - **PNG / PDF / SVG output** — whatever matplotlib supports.
@@ -160,6 +161,7 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 | `font_size` | `12` | Base font size in points |
 | `indent_size` | `3` | Spaces added per depth level in labels |
 | `label_fraction` | `0.0` | Fraction of figure width used for labels; `0` means auto-size from measured text width |
+| `subtask_lightening_pct` | `0.0` | Percentage to lighten inherited subtask colours at each nested level; `20` means each inherited step moves 20% toward white |
 | `colors` | palette | Array of default hex colours cycled per top-level task |
 | `background` | `"#FFFFFF"` | Figure background colour |
 | `grid_color` | `"#E0E0E0"` | Vertical gridline colour |
@@ -181,47 +183,47 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 
 ## Examples
 
-See the [`examples/`](examples/) folder for ready-to-run JSON files.
+See the [examples/](https://github.com/briday1/jsonantt/tree/main/examples) folder for ready-to-run JSON files.
 
 ### Simple project
 
-[`examples/simple.json`](examples/simple.json) — a five-phase project with milestones
+[examples/simple.json](https://github.com/briday1/jsonantt/blob/main/examples/simple.json) — a five-phase project with milestones
 
-![simple](examples/simple.png)
+![simple](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/simple.png)
 
 ### Dependencies
 
-[`examples/dependencies.json`](examples/dependencies.json) — `id`, `duration`, and `not_before`
+[examples/dependencies.json](https://github.com/briday1/jsonantt/blob/main/examples/dependencies.json) — `id`, `duration`, and `not_before`
 
-![dependencies](examples/dependencies.png)
+![dependencies](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/dependencies.png)
 
 ### Render depth
 
-[`examples/renderdepth.json`](examples/renderdepth.json) — nested tasks that are useful with `-r` / `--renderdepth`
+[examples/renderdepth.json](https://github.com/briday1/jsonantt/blob/main/examples/renderdepth.json) — nested tasks that are useful with `-r` / `--renderdepth`
 
 Full depth, `render_depth=0`:
 
-![render depth all](examples/renderdepth.png)
+![render depth all](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/renderdepth.png)
 
 One child level, `-r 2`:
 
-![render depth mid](examples/renderdepth-mid.png)
+![render depth mid](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/renderdepth-mid.png)
 
 Top level only, `-r 1`:
 
-![render depth top](examples/renderdepth-top.png)
+![render depth top](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/renderdepth-top.png)
 
 Table output, `-t`:
 
-![render depth table](examples/renderdepth-table.png)
+![render depth table](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/renderdepth-table.png)
 
 Milestones only, `-t --milestones-only`:
 
-![render depth milestones table](examples/renderdepth-milestones.png)
+![render depth milestones table](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/renderdepth-milestones.png)
 
 No milestones, `-t --no-milestones`:
 
-![render depth no milestones table](examples/renderdepth-no-milestones.png)
+![render depth no milestones table](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/renderdepth-no-milestones.png)
 
 Try the same file with different depth limits:
 
@@ -237,55 +239,55 @@ jsonantt -t examples/renderdepth.json examples/renderdepth-table.csv # CSV table
 
 ### Color schemes
 
-[`examples/colors.json`](examples/colors.json) — custom palette, background, grid, row band, milestone colours, and custom milestone markers
+[examples/colors.json](https://github.com/briday1/jsonantt/blob/main/examples/colors.json) — custom palette, background, grid, row band, milestone colours, and custom milestone markers
 
-![color schemes](examples/colors.png)
+![color schemes](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/colors.png)
 
 ### Compare mode
 
-[`examples/compare-planned.json`](examples/compare-planned.json) and [`examples/compare-actual.json`](examples/compare-actual.json) — planned vs actual comparison with a CLI date line
+[examples/compare-planned.json](https://github.com/briday1/jsonantt/blob/main/examples/compare-planned.json) and [examples/compare-actual.json](https://github.com/briday1/jsonantt/blob/main/examples/compare-actual.json) — planned vs actual comparison with a CLI date line
 
 Compare chart:
 
-![compare chart](examples/compare.png)
+![compare chart](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/compare.png)
 
 Compare table image:
 
-![compare table](examples/compare-table.png)
+![compare table](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/compare-table.png)
 
 CSV export:
 
-[`examples/compare-table.csv`](examples/compare-table.csv)
+[examples/compare-table.csv](https://github.com/briday1/jsonantt/blob/main/examples/compare-table.csv)
 
 ### Description wrapping
 
-[`examples/description-wrap.json`](examples/description-wrap.json) — demonstrates normal word wrapping in table output and the edge case where a single unbroken token will not wrap
+[examples/description-wrap.json](https://github.com/briday1/jsonantt/blob/main/examples/description-wrap.json) — demonstrates normal word wrapping in table output and the edge case where a single unbroken token will not wrap
 
 Table output, `-t`:
 
-![description wrap table](examples/description-wrap-table.png)
+![description wrap table](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/description-wrap-table.png)
 
 CSV export:
 
-[`examples/description-wrap-table.csv`](examples/description-wrap-table.csv)
+[examples/description-wrap-table.csv](https://github.com/briday1/jsonantt/blob/main/examples/description-wrap-table.csv)
 
 ### Complex roadmap
 
-[`examples/complex.json`](examples/complex.json) — a multi-year roadmap with deep nesting, task descriptions, and custom colours
+[examples/complex.json](https://github.com/briday1/jsonantt/blob/main/examples/complex.json) — a multi-year roadmap with deep nesting, task descriptions, and custom colours
 
-![complex](examples/complex.png)
+![complex](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/complex.png)
 
 Table output, `-t`:
 
-![complex table](examples/complex-table.png)
+![complex table](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/complex-table.png)
 
 Milestones only, `-t --milestones-only`:
 
-![complex milestones table](examples/complex-milestones.png)
+![complex milestones table](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/complex-milestones.png)
 
 No milestones, `-t --no-milestones`:
 
-![complex no milestones table](examples/complex-no-milestones.png)
+![complex no milestones table](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/complex-no-milestones.png)
 
 
 ## How to Run

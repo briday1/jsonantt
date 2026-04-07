@@ -7,6 +7,7 @@
     "font_size": 12,
     "major_tick": "month",
     "minor_tick": "week",
+    "subtask_lightening_pct": 20,
     "background": "#F7F3E8",
     "grid_color": "#C9B89A",
     "row_band_color": "#EFE7D7",

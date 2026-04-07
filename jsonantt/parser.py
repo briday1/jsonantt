@@ -79,6 +79,7 @@ def _parse_style(data: Dict[str, Any]) -> Style:
         "font_size": "font_size",
         "indent_size": "indent_size",
         "label_fraction": "label_fraction",
+        "subtask_lightening_pct": "subtask_lightening_pct",
         "colors": "colors",
         "background": "background",
         "grid_color": "grid_color",

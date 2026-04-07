@@ -15,6 +15,7 @@ from jsonantt.renderer import (
     _darken,
     _flatten,
     _format_compare_offset,
+    _lighten,
     _milestone_color,
     _milestone_marker,
     _prepare_compare_rows,
@@ -166,6 +167,67 @@ class TestFlatten:
         child_color = rows[1].color
         assert parent_color == "#112233"
         assert child_color == "#112233"
+
+    def test_child_inherited_color_lightens_when_configured(self):
+        cfg = parse_chart(
+            {
+                "style": {"subtask_lightening_pct": 20},
+                "tasks": [
+                    {
+                        "name": "Parent",
+                        "color": "#112233",
+                        "children": [
+                            {"name": "Child", "start": "2024-01-01", "end": "2024-01-10"}
+                        ],
+                    }
+                ]
+            }
+        )
+        rows = _flatten(cfg.tasks, cfg.style)
+        assert rows[0].color == "#112233"
+        assert rows[1].color == _lighten("#112233", 0.20)
+
+    def test_nested_inherited_color_lightens_recursively(self):
+        cfg = parse_chart(
+            {
+                "style": {"subtask_lightening_pct": 20},
+                "tasks": [
+                    {
+                        "name": "Parent",
+                        "color": "#112233",
+                        "children": [
+                            {
+                                "name": "Child",
+                                "children": [
+                                    {"name": "Grandchild", "start": "2024-01-01", "end": "2024-01-10"}
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        rows = _flatten(cfg.tasks, cfg.style)
+        assert rows[1].color == _lighten("#112233", 0.20)
+        assert rows[2].color == _lighten(rows[1].color, 0.20)
+
+    def test_explicit_child_color_does_not_lighten(self):
+        cfg = parse_chart(
+            {
+                "style": {"subtask_lightening_pct": 20},
+                "tasks": [
+                    {
+                        "name": "Parent",
+                        "color": "#112233",
+                        "children": [
+                            {"name": "Child", "color": "#ABCDEF", "start": "2024-01-01", "end": "2024-01-10"}
+                        ],
+                    }
+                ]
+            }
+        )
+        rows = _flatten(cfg.tasks, cfg.style)
+        assert rows[1].color == "#ABCDEF"
 
     def test_default_milestone_color_is_yellow(self):
         cfg = parse_chart({"tasks": [{"name": "M", "milestone": True, "date": "2024-01-01"}]})

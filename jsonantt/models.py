@@ -104,6 +104,7 @@ class Style:
     font_size: float = 12.0      # base font size in pts
     indent_size: int = 3         # spaces added per depth level
     label_fraction: float = 0.0  # 0 = auto-size label area from measured text width
+    subtask_lightening_pct: float = 0.0  # percentage to lighten inherited child colors per depth step
     colors: List[str] = field(default_factory=lambda: list(DEFAULT_PALETTE))
     background: str = "#FFFFFF"  # figure background colour
     grid_color: str = "#E0E0E0"  # vertical gridline colour

@@ -33,6 +33,24 @@ def _milestone_color(row: _Row, style: Style) -> str:
     """Return the milestone color for a row, preferring task color override."""
     return row.task.color if row.task.color else style.milestone_color
 
+
+def _lighten(color: str, amount: float = 0.0) -> str:
+    """Lighten *color* toward white by *amount* in the range 0..1."""
+    try:
+        color = color.lstrip("#")
+        if len(color) != 6:
+            return color
+        amount = max(0.0, min(1.0, amount))
+        red = int(color[0:2], 16)
+        green = int(color[2:4], 16)
+        blue = int(color[4:6], 16)
+        red = round(red + (255 - red) * amount)
+        green = round(green + (255 - green) * amount)
+        blue = round(blue + (255 - blue) * amount)
+        return f"#{red:02X}{green:02X}{blue:02X}"
+    except Exception:
+        return color if color.startswith("#") else f"#{color}"
+
 # ---------------------------------------------------------------------------
 # Internal helper types
 # ---------------------------------------------------------------------------
@@ -859,13 +877,14 @@ def _flatten(
     rows: List[_Row] = []
     palette = style.colors or ["#4472C4"]
     max_depth_index = None if max_depth == 0 else max_depth - 1
+    lighten_amount = max(0.0, min(100.0, style.subtask_lightening_pct)) / 100.0
 
     for task_idx, task in enumerate(tasks):
         # colour resolution: explicit > parent > palette
         if task.color:
             color = task.color
         elif parent_color and depth > 0:
-            color = parent_color
+            color = _lighten(parent_color, lighten_amount)
         else:
             color = palette[palette_index % len(palette)]
             palette_index += 1

@@ -24,6 +24,11 @@ dependencies = [
     "matplotlib>=3.5",
 ]
 
+[project.urls]
+Homepage = "https://github.com/briday1/jsonantt"
+Repository = "https://github.com/briday1/jsonantt"
+Issues = "https://github.com/briday1/jsonantt/issues"
+
 [project.scripts]
 jsonantt = "jsonantt.cli:main"
 

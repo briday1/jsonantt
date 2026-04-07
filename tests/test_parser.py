@@ -191,7 +191,7 @@ class TestParseChart:
 
     def test_style_parsed(self):
         data = {
-            "style": {"width": 20, "font_size": 12, "indent_size": 4, "number_tasks": False, "table_colorize": False, "table_show_markers": False, "milestone_color": "#FFFF00", "milestone_marker": "o"},
+            "style": {"width": 20, "font_size": 12, "indent_size": 4, "number_tasks": False, "table_colorize": False, "table_show_markers": False, "milestone_color": "#FFFF00", "milestone_marker": "o", "subtask_lightening_pct": 20},
             "tasks": [],
         }
         cfg = parse_chart(data)
@@ -203,6 +203,7 @@ class TestParseChart:
         assert cfg.style.table_show_markers is False
         assert cfg.style.milestone_color == "#FFFF00"
         assert cfg.style.milestone_marker == "o"
+        assert cfg.style.subtask_lightening_pct == 20
 
     def test_task_marker_override_parsed(self):
         data = {
