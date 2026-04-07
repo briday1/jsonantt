@@ -5,11 +5,13 @@ import math
 from datetime import date, datetime, timedelta
 from typing import List, Optional, Tuple
 
+import matplotlib
 import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 import matplotlib.patches as mpatches
-import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
 from .models import Arrow, ChartConfig, Style, Task
@@ -37,9 +39,17 @@ class _Row:
 # ---------------------------------------------------------------------------
 
 
-def render_chart(config: ChartConfig, output_path: str, dpi: int = 150) -> None:
+def render_chart(
+    config: ChartConfig,
+    output_path: str,
+    dpi: int = 150,
+    render_depth: int = 0,
+) -> None:
     """Render *config* to *output_path* (PNG, PDF, SVG …)."""
-    rows = _flatten(config.tasks, config.style)
+    if render_depth < 0:
+        raise ValueError("render_depth must be >= 0")
+
+    rows = _flatten(config.tasks, config.style, max_depth=render_depth)
     if not rows:
         raise ValueError("No tasks to render.")
 
@@ -66,8 +76,7 @@ def render_chart(config: ChartConfig, output_path: str, dpi: int = 150) -> None:
 
     max_text_in = 0.0
     for row in rows:
-        number_str = row.number + "." if "." not in row.number else row.number
-        label = number_str + "  " + row.task.name
+        label = _row_label_text(row, style)
         text_in = (row.depth * indent_chars + len(label)) * char_width_in
         max_text_in = max(max_text_in, text_in)
 
@@ -243,9 +252,11 @@ def _flatten(
     palette_index: int = 0,
     parent_color: Optional[str] = None,
     number_prefix: str = "",
+    max_depth: int = 0,
 ) -> List[_Row]:
     rows: List[_Row] = []
     palette = style.colors or ["#4472C4"]
+    max_depth_index = None if max_depth == 0 else max_depth - 1
 
     for task_idx, task in enumerate(tasks):
         # colour resolution: explicit > parent > palette
@@ -261,7 +272,7 @@ def _flatten(
         row = _Row(task=task, depth=depth, row_index=0, color=color, number=number)
         rows.append(row)
 
-        if task.children:
+        if task.children and (max_depth_index is None or depth < max_depth_index):
             child_rows = _flatten(
                 task.children,
                 style,
@@ -269,6 +280,7 @@ def _flatten(
                 palette_index=palette_index,
                 parent_color=color,
                 number_prefix=number + ".",
+                max_depth=max_depth,
             )
             rows.extend(child_rows)
 
@@ -420,8 +432,7 @@ def _draw_row(ax_lbl, ax_bar, row: _Row, n: int, style: Style,
     # ---- label ------------------------------------------------------------
     x = left_margin + row.depth * indent_step
 
-    number_str = row.number + "." if "." not in row.number else row.number
-    label_text = number_str + "  " + task.name
+    label_text = _row_label_text(row, style)
 
     # bold: explicit task flag, or auto-bold depth-0 when style.bold_tasks is on
     weight = "bold" if (task.bold or (style.bold_tasks and row.depth == 0)) else "normal"
@@ -488,6 +499,15 @@ def _draw_milestone(ax_bar, row: _Row, y: float, style: Style) -> None:
         zorder=5,
         linestyle="none",
     )
+
+
+def _row_label_text(row: _Row, style: Style) -> str:
+    """Return the rendered label text for a row."""
+    if not style.number_tasks:
+        return row.task.name
+
+    number_str = row.number + "." if "." not in row.number else row.number
+    return number_str + "  " + row.task.name
 
 
 # ---------------------------------------------------------------------------

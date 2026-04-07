@@ -23,6 +23,15 @@ def main(argv=None) -> int:
         "--dpi", type=int, default=150,
         help="Image resolution in DPI (default: 150, raster formats only)",
     )
+    parser.add_argument(
+        "-r", "--renderdepth",
+        type=int,
+        default=0,
+        help=(
+            "Maximum nesting depth to render: 0 renders all levels, 1 renders only "
+            "top-level tasks, 2 includes one level of children, and so on"
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -36,7 +45,7 @@ def main(argv=None) -> int:
         return 1
 
     try:
-        render_chart(config, args.output, dpi=args.dpi)
+        render_chart(config, args.output, dpi=args.dpi, render_depth=args.renderdepth)
     except Exception as exc:  # noqa: BLE001
         print(f"error: failed to render chart: {exc}", file=sys.stderr)
         return 1

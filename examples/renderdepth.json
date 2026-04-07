@@ -1,0 +1,71 @@
+{
+  "title": "Render Depth Example",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "width": 15,
+    "row_height": 0.3,
+    "font_size": 12,
+    "major_tick": "month",
+    "minor_tick": "week",
+    "number_tasks": false
+  },
+  "tasks": [
+    {
+      "name": "Platform refresh",
+      "color": "#4472C4",
+      "children": [
+        {
+          "name": "Architecture",
+          "children": [
+            {
+              "name": "Requirements",
+              "start": "2024-01-08",
+              "end": "2024-01-19"
+            },
+            {
+              "name": "System design",
+              "start": "2024-01-22",
+              "end": "2024-02-09"
+            }
+          ]
+        },
+        {
+          "name": "Implementation",
+          "children": [
+            {
+              "name": "Backend services",
+              "start": "2024-02-12",
+              "end": "2024-03-22"
+            },
+            {
+              "name": "Frontend UI",
+              "start": "2024-02-26",
+              "end": "2024-03-29"
+            }
+          ]
+        },
+        {
+          "name": "Cutover",
+          "milestone": true,
+          "date": "2024-04-05"
+        }
+      ]
+    },
+    {
+      "name": "Adoption",
+      "color": "#70AD47",
+      "children": [
+        {
+          "name": "Training",
+          "start": "2024-03-04",
+          "end": "2024-03-22"
+        },
+        {
+          "name": "Pilot",
+          "start": "2024-03-25",
+          "end": "2024-04-12"
+        }
+      ]
+    }
+  ]
+}

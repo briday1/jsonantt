@@ -177,13 +177,14 @@ class TestParseChart:
 
     def test_style_parsed(self):
         data = {
-            "style": {"width": 20, "font_size": 12, "indent_size": 4},
+            "style": {"width": 20, "font_size": 12, "indent_size": 4, "number_tasks": False},
             "tasks": [],
         }
         cfg = parse_chart(data)
         assert cfg.style.width == 20
         assert cfg.style.font_size == 12
         assert cfg.style.indent_size == 4
+        assert cfg.style.number_tasks is False
 
     def test_shorthand_string_task(self):
         data = {"tasks": ["Quick task"]}

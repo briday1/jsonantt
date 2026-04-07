@@ -71,6 +71,8 @@ jsonantt project.json project.png
 jsonantt project.json project.pdf   # vector PDF
 jsonantt project.json project.svg   # scalable SVG
 jsonantt --dpi 300 project.json project.png   # high-resolution PNG
+jsonantt -r 1 project.json project.png   # top-level tasks only
+jsonantt --renderdepth 2 project.json project.png   # include one child level
 ```
 
 **Python API:**
@@ -80,7 +82,10 @@ from jsonantt import load_chart, render_chart
 
 config = load_chart("project.json")
 render_chart(config, "project.png", dpi=150)
+render_chart(config, "summary.png", dpi=150, render_depth=1)
 ```
+
+`render_depth=0` renders all nested levels. `1` renders only top-level tasks, `2` includes one level of children, and so on.
 
 ---
 
@@ -138,6 +143,7 @@ render_chart(config, "project.png", dpi=150)
 | `minor_grid_width` | `1.5` | Minor gridline linewidth |
 | `tick_position` | `"top"` | X-axis label position: `"top"`, `"bottom"`, or `"both"` |
 | `bold_tasks` | `true` | Auto-bold top-level (depth 0) task labels |
+| `number_tasks` | `true` | Prefix task labels with hierarchy numbers like `1`, `1.1`, `1.2` |
 
 ---
 
@@ -157,6 +163,38 @@ See the [`examples/`](examples/) folder for ready-to-run JSON files.
 
 ![dependencies](examples/dependencies.png)
 
+### Render depth
+
+[`examples/renderdepth.json`](examples/renderdepth.json) — nested tasks that are useful with `-r` / `--renderdepth`
+
+This example also sets `style.number_tasks` to `false`, so indentation is preserved while task numbering is suppressed.
+
+Full depth, `render_depth=0`:
+
+![render depth all](examples/renderdepth.png)
+
+One child level, `-r 2`:
+
+![render depth mid](examples/renderdepth-mid.png)
+
+Top level only, `-r 1`:
+
+![render depth top](examples/renderdepth-top.png)
+
+Try the same file with different depth limits:
+
+```bash
+jsonantt examples/renderdepth.json examples/renderdepth-all.png      # full depth
+jsonantt -r 1 examples/renderdepth.json examples/renderdepth-top.png # top-level only
+jsonantt -r 2 examples/renderdepth.json examples/renderdepth-mid.png # one child level
+```
+
+### Color schemes
+
+[`examples/colors.json`](examples/colors.json) — custom palette, background, grid, row band, and milestone colours
+
+![color schemes](examples/colors.png)
+
 ### Complex roadmap
 
 [`examples/complex.json`](examples/complex.json) — a multi-year roadmap with deep nesting and custom colours
@@ -167,8 +205,12 @@ See the [`examples/`](examples/) folder for ready-to-run JSON files.
 ## How to Run
 
 ```bash
-jsonantt examples/simple.json examples/simple.png
-jsonantt examples/complex.json examples/complex.png
-jsonantt examples/dependencies.json examples/dependencies.png
+jsonantt examples/simple.json examples/simple.png                    # basic milestones
+jsonantt examples/dependencies.json examples/dependencies.png        # not_before scheduling
+jsonantt examples/renderdepth.json examples/renderdepth.png          # full nested view
+jsonantt -r 1 examples/renderdepth.json examples/renderdepth-top.png # top-level only
+jsonantt -r 2 examples/renderdepth.json examples/renderdepth-mid.png # one child level
+jsonantt examples/colors.json examples/colors.png                    # custom palette and background
+jsonantt examples/complex.json examples/complex.png                  # deep roadmap example
 ```
 

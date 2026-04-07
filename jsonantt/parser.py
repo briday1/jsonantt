@@ -90,6 +90,7 @@ def _parse_style(data: Dict[str, Any]) -> Style:
         "major_grid_width": "major_grid_width",
         "minor_grid_width": "minor_grid_width",
         "bold_tasks": "bold_tasks",
+        "number_tasks": "number_tasks",
         "tick_position": "tick_position",
     }
     for json_key, attr in mapping.items():

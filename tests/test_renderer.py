@@ -9,7 +9,7 @@ import pytest
 
 from jsonantt.models import ChartConfig, Style, Task
 from jsonantt.parser import parse_chart
-from jsonantt.renderer import _darken, _flatten, render_chart
+from jsonantt.renderer import _darken, _flatten, _row_label_text, render_chart
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +124,48 @@ class TestFlatten:
         assert parent_color == "#112233"
         assert child_color == "#112233"
 
+    def test_render_depth_zero_includes_all_levels(self):
+        cfg = _config_with_children()
+        rows = _flatten(cfg.tasks, cfg.style, max_depth=0)
+        assert [row.task.name for row in rows] == ["Phase 1", "Sub A", "Sub B", "Milestone"]
+
+    def test_render_depth_one_keeps_top_level_only(self):
+        cfg = _config_with_children()
+        rows = _flatten(cfg.tasks, cfg.style, max_depth=1)
+        assert [row.task.name for row in rows] == ["Phase 1", "Milestone"]
+
+    def test_render_depth_two_includes_one_child_level(self):
+        cfg = parse_chart(
+            {
+                "tasks": [
+                    {
+                        "name": "Phase 1",
+                        "children": [
+                            {
+                                "name": "Sub A",
+                                "children": [
+                                    {
+                                        "name": "Leaf",
+                                        "start": "2024-01-01",
+                                        "end": "2024-01-05",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        rows = _flatten(cfg.tasks, cfg.style, max_depth=2)
+        assert [row.task.name for row in rows] == ["Phase 1", "Sub A"]
+
+    def test_row_label_text_omits_numbers_when_disabled(self):
+        cfg = _config_with_children()
+        cfg.style.number_tasks = False
+        rows = _flatten(cfg.tasks, cfg.style)
+        assert _row_label_text(rows[0], cfg.style) == "Phase 1"
+        assert _row_label_text(rows[1], cfg.style) == "Sub A"
+
 
 # ---------------------------------------------------------------------------
 # _darken
@@ -221,6 +263,29 @@ class TestRenderChart:
             }
         )
         self._render(cfg, ".png")
+
+    def test_render_chart_rejects_negative_render_depth(self):
+        cfg = _simple_config()
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            with pytest.raises(ValueError, match="render_depth must be >= 0"):
+                render_chart(cfg, path, render_depth=-1)
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_chart_with_limited_depth(self):
+        self._render(_config_with_children(), ".png")
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            render_chart(_config_with_children(), path, dpi=72, render_depth=1)
+            assert os.path.exists(path)
+            assert os.path.getsize(path) > 0
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
 
     def test_render_example_simple(self):
         here = os.path.dirname(os.path.dirname(__file__))

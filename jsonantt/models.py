@@ -113,6 +113,7 @@ class Style:
     major_grid_width: float = 2.0     # major gridline linewidth
     minor_grid_width: float = 1.5     # minor gridline linewidth
     bold_tasks: bool = True           # auto-bold top-level (depth 0) tasks
+    number_tasks: bool = True         # prefix task labels with hierarchy numbers
     tick_position: str = "top"        # x-axis label position: "top", "bottom", or "both"
 
 
