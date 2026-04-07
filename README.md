@@ -94,29 +94,46 @@ render_chart(config, "project.png", dpi=150)
 | `end` | date string | Optional chart x-axis end date |
 | `style` | object | Visual style overrides (see below) |
 | `tasks` | array | Top-level list of task objects |
+| `arrows` | array | Dependency arrows drawn between tasks (see below) |
 
 ### Task object
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | string | **Required.** Task label |
+| `id` | string | Unique identifier used for `not_before` and `arrows` references |
 | `start` | date string | Bar start date |
 | `end` | date string | Bar end date |
+| `duration` | string or int | Duration from `start` (or resolved `not_before` end): `"14d"`, `"2w"`, `"3m"`, `"2y"`, or a plain integer (days) |
+| `not_before` | string | `id` of another task — this task starts immediately after that task ends |
 | `color` | CSS hex string | Bar/milestone colour (e.g. `"#4472C4"`) |
 | `milestone` | boolean | Render as a diamond milestone instead of a bar |
 | `date` | date string | Milestone date (used when `milestone: true`) |
+| `marker_size` | number | Override milestone diamond size in points |
+| `bold` | boolean | Render label in bold (top-level tasks are auto-bolded by default) |
 | `children` | array | Nested sub-tasks (infinitely nestable) |
 
 > **Auto date computation:** When a task has `children` but no explicit `start`/`end`, the dates are computed automatically as the earliest child start and latest child end, recursively.
+
+> **Duration formats:** `d`/`day`/`days`, `w`/`week`/`weeks`, `m`/`month`/`months`, `y`/`year`/`years` — e.g. `"14d"`, `"2w"`, `"3m"`, `"1y"`.
+
+### Arrow object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `from` | string | `id` of the source task (arrow starts at its end) |
+| `to` | string | `id` of the target task (arrow points to its start) |
+| `color` | CSS hex string | Arrow colour (default: `"#888888"`) |
+| `label` | string | Optional text label drawn on the arrow |
 
 ### Style object
 
 | Field | Default | Description |
 |-------|---------|-------------|
 | `width` | `14` | Figure width in inches |
-| `row_height` | `0.45` | Height of each task row in inches |
+| `row_height` | `0.3` | Height of each task row in inches |
 | `bar_height` | `0.5` | Bar height as a fraction of `row_height` |
-| `font_size` | `9` | Base font size in points |
+| `font_size` | `12` | Base font size in points |
 | `indent_size` | `3` | Spaces added per depth level in labels |
 | `label_fraction` | `0.28` | Fraction of figure width used for labels |
 | `colors` | palette | Array of default hex colours cycled per top-level task |
@@ -124,21 +141,44 @@ render_chart(config, "project.png", dpi=150)
 | `grid_color` | `"#E0E0E0"` | Vertical gridline colour |
 | `row_band_color` | `"#F5F5F5"` | Alternating row band colour |
 | `milestone_color` | `"#E65100"` | Default milestone colour |
+| `milestone_size` | `14` | Default milestone diamond size in points |
+| `major_tick` | `null` | Major tick unit: `"year"`, `"quarter"`, `"month"`, `"week"` |
+| `minor_tick` | `null` | Minor tick unit: `"quarter"`, `"month"`, `"week"`, `"day"` |
+| `major_grid_width` | `2.0` | Major gridline linewidth |
+| `minor_grid_width` | `1.5` | Minor gridline linewidth |
+| `tick_position` | `"top"` | X-axis label position: `"top"`, `"bottom"`, or `"both"` |
+| `bold_tasks` | `true` | Auto-bold top-level (depth 0) task labels |
 
 ---
 
 ## Examples
 
-See the [`examples/`](examples/) folder for ready-to-run JSON files:
+See the [`examples/`](examples/) folder for ready-to-run JSON files.
 
-- [`examples/simple.json`](examples/simple.json) — a three-phase project with milestones
-- [`examples/complex.json`](examples/complex.json) — a multi-quarter roadmap with deep nesting and custom colours
+### Simple project
+
+[`examples/simple.json`](examples/simple.json) — a five-phase project with milestones
+
+![simple](examples/simple.png)
+
+### Complex roadmap
+
+[`examples/complex.json`](examples/complex.json) — a multi-year roadmap with deep nesting and custom colours
+
+![complex](examples/complex.png)
+
+### Dependencies & arrows
+
+[`examples/dependencies.json`](examples/dependencies.json) — `id`, `duration`, `not_before`, and `arrows`
+
+![dependencies](examples/dependencies.png)
 
 Generate them locally:
 
 ```bash
-jsonantt examples/simple.json simple.png
-jsonantt examples/complex.json complex.png
+jsonantt examples/simple.json examples/simple.png
+jsonantt examples/complex.json examples/complex.png
+jsonantt examples/dependencies.json examples/dependencies.png
 ```
 
 ---
