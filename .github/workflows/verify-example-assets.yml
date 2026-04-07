@@ -1,0 +1,54 @@
+name: Verify Example Assets
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify-example-assets:
+    name: Verify example PNGs and README references
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check example PNG coverage and README image references
+        run: |
+          python << 'PYTHON_EOF'
+          from pathlib import Path
+          import re
+          import sys
+
+          repo_root = Path('.')
+          examples_dir = repo_root / 'examples'
+          readme_path = repo_root / 'README.md'
+
+          errors = []
+
+          json_files = sorted(examples_dir.rglob('*.json'))
+          if not json_files:
+              errors.append('No example JSON files found under examples/.')
+
+          for json_path in json_files:
+              png_path = json_path.with_suffix('.png')
+              if not png_path.exists():
+                  errors.append(f'Missing rendered PNG for example JSON: {json_path.as_posix()} -> {png_path.as_posix()}')
+
+          readme_text = readme_path.read_text(encoding='utf-8')
+          image_refs = sorted(set(re.findall(r'!\[[^\]]*\]\((examples/[^)]+\.png)\)', readme_text)))
+          for image_ref in image_refs:
+              image_path = repo_root / image_ref
+              if not image_path.exists():
+                  errors.append(f'README references missing image: {image_ref}')
+
+          if errors:
+              print('Example asset verification failed:', file=sys.stderr)
+              for error in errors:
+                  print(f'- {error}', file=sys.stderr)
+              raise SystemExit(1)
+
+          print(f'Validated {len(json_files)} example JSON files and {len(image_refs)} README image references.')
+          PYTHON_EOF
