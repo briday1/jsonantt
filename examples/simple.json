@@ -1,0 +1,67 @@
+{
+  "title": "Simple Project",
+  "dateformat": "%Y-%m-%d",
+  "tasks": [
+    {
+      "name": "Phase 1 – Planning",
+      "children": [
+        {
+          "name": "Requirements gathering",
+          "start": "2024-01-08",
+          "end": "2024-01-19"
+        },
+        {
+          "name": "Architecture design",
+          "start": "2024-01-15",
+          "end": "2024-01-31"
+        }
+      ]
+    },
+    {
+      "name": "Planning complete",
+      "milestone": true,
+      "date": "2024-01-31"
+    },
+    {
+      "name": "Phase 2 – Development",
+      "children": [
+        {
+          "name": "Backend API",
+          "start": "2024-02-01",
+          "end": "2024-03-01"
+        },
+        {
+          "name": "Frontend",
+          "start": "2024-02-12",
+          "end": "2024-03-08"
+        },
+        {
+          "name": "Integration",
+          "start": "2024-03-04",
+          "end": "2024-03-15"
+        }
+      ]
+    },
+    {
+      "name": "Phase 3 – Testing",
+      "children": [
+        {
+          "name": "QA testing",
+          "start": "2024-03-11",
+          "end": "2024-03-22"
+        },
+        {
+          "name": "User acceptance testing",
+          "start": "2024-03-18",
+          "end": "2024-03-29"
+        }
+      ]
+    },
+    {
+      "name": "Product launch",
+      "milestone": true,
+      "date": "2024-04-01",
+      "color": "#FF5757"
+    }
+  ]
+}

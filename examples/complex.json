@@ -1,0 +1,139 @@
+{
+  "title": "Acme Platform — 2024 Roadmap",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "width": 16,
+    "row_height": 0.42,
+    "font_size": 9,
+    "indent_size": 3
+  },
+  "tasks": [
+    {
+      "name": "Q1 — Foundation",
+      "color": "#4472C4",
+      "children": [
+        {
+          "name": "Infrastructure",
+          "children": [
+            {
+              "name": "Cloud provisioning",
+              "start": "2024-01-08",
+              "end": "2024-01-26",
+              "color": "#7EA6D9"
+            },
+            {
+              "name": "CI/CD pipeline",
+              "start": "2024-01-22",
+              "end": "2024-02-09"
+            }
+          ]
+        },
+        {
+          "name": "Core API",
+          "children": [
+            {
+              "name": "Auth service",
+              "start": "2024-01-15",
+              "end": "2024-02-02"
+            },
+            {
+              "name": "Data models",
+              "start": "2024-01-22",
+              "end": "2024-02-16"
+            },
+            {
+              "name": "REST endpoints",
+              "start": "2024-02-05",
+              "end": "2024-02-29"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Q1 foundation complete",
+      "milestone": true,
+      "date": "2024-03-01",
+      "color": "#4472C4"
+    },
+    {
+      "name": "Q2 — Product",
+      "color": "#70AD47",
+      "children": [
+        {
+          "name": "Web frontend",
+          "children": [
+            {
+              "name": "Design system",
+              "start": "2024-03-04",
+              "end": "2024-03-22"
+            },
+            {
+              "name": "Dashboard views",
+              "start": "2024-03-18",
+              "end": "2024-04-12"
+            },
+            {
+              "name": "Settings & admin",
+              "start": "2024-04-08",
+              "end": "2024-04-26"
+            }
+          ]
+        },
+        {
+          "name": "Mobile app",
+          "children": [
+            {
+              "name": "iOS",
+              "start": "2024-03-11",
+              "end": "2024-04-19"
+            },
+            {
+              "name": "Android",
+              "start": "2024-03-18",
+              "end": "2024-04-26"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Beta release",
+      "milestone": true,
+      "date": "2024-05-01",
+      "color": "#ED7D31"
+    },
+    {
+      "name": "Q3 — Hardening",
+      "color": "#ED7D31",
+      "children": [
+        {
+          "name": "Performance tuning",
+          "start": "2024-05-06",
+          "end": "2024-06-07"
+        },
+        {
+          "name": "Security audit",
+          "start": "2024-05-13",
+          "end": "2024-05-31"
+        },
+        {
+          "name": "Load testing",
+          "start": "2024-06-03",
+          "end": "2024-06-21"
+        },
+        {
+          "name": "Bug bash",
+          "start": "2024-06-17",
+          "end": "2024-06-28"
+        }
+      ]
+    },
+    {
+      "name": "GA launch",
+      "milestone": true,
+      "date": "2024-07-01",
+      "color": "#FF5757"
+    }
+  ]
+}
