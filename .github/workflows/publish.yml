@@ -83,20 +83,40 @@ jobs:
 
       - name: Render example PNGs
         run: |
-          pip install matplotlib
-          pip install -e . --no-deps
-          for f in examples/*.json; do
-            out="examples/$(basename "$f" .json).png"
-            echo "Rendering $f -> $out"
-            jsonantt "$f" "$out" --dpi 150
-          done
+          python -m pip install -e .
+          python << 'PYTHON_EOF'
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          root = Path('examples')
+          json_files = sorted(root.rglob('*.json'))
+          if not json_files:
+              raise SystemExit('No example JSON files found under examples/')
+
+          for json_path in json_files:
+              png_path = json_path.with_suffix('.png')
+              print(f'Rendering {json_path} -> {png_path}')
+              subprocess.run(
+                  [
+                      sys.executable,
+                      '-m',
+                      'jsonantt.cli',
+                      str(json_path),
+                      str(png_path),
+                      '--dpi',
+                      '150',
+                  ],
+                  check=True,
+              )
+          PYTHON_EOF
 
       - name: Commit rendered example PNGs
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add examples/*.png
-          git diff --cached --quiet && echo "No PNG changes" || git commit -m "chore: update rendered example PNGs [skip ci]"
+          git add -A -f examples
+          git diff --cached --quiet && echo "No example image changes" || git commit -m "chore: update rendered example PNGs [skip ci]"
           git push origin main || echo "Nothing to push"
 
       - name: Install build tools

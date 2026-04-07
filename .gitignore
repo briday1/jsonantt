@@ -34,3 +34,4 @@ Thumbs.db
 *.png
 *.pdf
 *.svg
+!examples/**/*.png
