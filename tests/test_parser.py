@@ -104,6 +104,21 @@ class TestParseChart:
         cfg = parse_chart(data)
         assert cfg.tasks[0].description == "Detailed summary"
 
+    def test_unknown_task_fields_are_preserved(self):
+        data = {
+            "tasks": [
+                {
+                    "name": "Task A",
+                    "start": "2024-01-01",
+                    "end": "2024-01-31",
+                    "cost": 1200,
+                    "assignee": "Morgan",
+                }
+            ]
+        }
+        cfg = parse_chart(data)
+        assert cfg.tasks[0].fields == {"cost": 1200, "assignee": "Morgan"}
+
     def test_custom_date_format(self):
         data = {
             "dateformat": "%d/%m/%Y",
@@ -191,7 +206,7 @@ class TestParseChart:
 
     def test_style_parsed(self):
         data = {
-            "style": {"width": 20, "font_size": 12, "indent_size": 4, "number_tasks": False, "table_colorize": False, "table_show_markers": False, "milestone_color": "#FFFF00", "milestone_marker": "o", "subtask_lightening_pct": 20},
+            "style": {"width": 20, "font_size": 12, "indent_size": 4, "number_tasks": False, "table_colorize": False, "table_show_markers": False, "milestone_color": "#FFFF00", "milestone_marker": "o", "subtask_lightening_pct": 20, "table_columns": ["task", "name", {"field": "cost", "title": "Cost"}]},
             "tasks": [],
         }
         cfg = parse_chart(data)
@@ -204,6 +219,7 @@ class TestParseChart:
         assert cfg.style.milestone_color == "#FFFF00"
         assert cfg.style.milestone_marker == "o"
         assert cfg.style.subtask_lightening_pct == 20
+        assert cfg.style.table_columns == ["task", "name", {"field": "cost", "title": "Cost"}]
 
     def test_task_marker_override_parsed(self):
         data = {

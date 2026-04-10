@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import csv
 from difflib import SequenceMatcher
+import json
 import math
 import os
 import textwrap
 from datetime import date, datetime, timedelta
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib
 import matplotlib.dates as mdates
@@ -115,6 +116,258 @@ class _CompareRow:
     @property
     def is_added(self) -> bool:
         return self.actual is not None and self.planned is None
+
+
+def _default_table_title(field: str) -> str:
+    """Return the default display title for a table field."""
+    titles = {
+        "task": "Task",
+        "name": "Name",
+        "description": "Description",
+        "id": "ID",
+        "not_before": "Not Before",
+        "effective_start": "Effective Start",
+        "effective_end": "Effective End",
+        "milestone_date": "Date",
+        "date": "Date",
+        "offset": "Offset",
+    }
+    return titles.get(field, field.replace("_", " ").title())
+
+
+def _resolve_table_columns(style: Style, include_offset: bool = False) -> List[Dict[str, str]]:
+    """Return normalized table columns from ``style.table_columns``."""
+    raw_columns = style.table_columns or ["task", "name", "description"]
+    columns: List[Dict[str, str]] = []
+
+    for item in raw_columns:
+        if isinstance(item, str):
+            field = item.strip()
+            if not field:
+                raise ValueError("style.table_columns cannot contain blank field names")
+            columns.append({"field": field, "title": _default_table_title(field)})
+            continue
+
+        if isinstance(item, dict):
+            field = str(item.get("field", "")).strip()
+            if not field:
+                raise ValueError("style.table_columns object entries require a non-empty 'field'")
+            title = str(item.get("title", _default_table_title(field)))
+            columns.append({"field": field, "title": title})
+            continue
+
+        raise ValueError("style.table_columns entries must be strings or objects with 'field'")
+
+    if not columns:
+        raise ValueError("style.table_columns must contain at least one column")
+
+    if include_offset and not any(column["field"] == "offset" for column in columns):
+        columns.append({"field": "offset", "title": "Offset"})
+    return columns
+
+
+def _table_column_min_width(field: str) -> float:
+    """Return the minimum width in inches for a table column."""
+    if field == "task":
+        return 0.55
+    if field == "name":
+        return 1.6
+    if field == "description":
+        return 2.6
+    if field == "offset":
+        return 1.2
+    return 1.4
+
+
+def _table_expand_index(columns: List[Dict[str, str]]) -> int:
+    """Return the index of the column that should absorb extra width."""
+    for index, column in enumerate(columns):
+        if column["field"] == "description":
+            return index
+    return len(columns) - 1
+
+
+def _has_table_value(value: Any) -> bool:
+    """Return True when *value* should be preferred in compare-table fallback."""
+    return value is not None and value != "" and value != [] and value != {}
+
+
+def _format_table_value(value: Any) -> str:
+    """Convert a task field value to display text for tables and CSV."""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ")
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def _task_field_value(task: Task, field: str) -> Any:
+    """Return a raw field value from *task* for table rendering."""
+    if field == "date":
+        return task.milestone_date
+    if hasattr(task, field):
+        return getattr(task, field)
+    return task.fields.get(field)
+
+
+def _row_table_cell(row: _Row, field: str) -> str:
+    """Return the rendered table cell text for *row* and *field*."""
+    if field == "task":
+        return _row_table_number(row)
+    if field == "name":
+        return row.task.name
+    return _format_table_value(_task_field_value(row.task, field))
+
+
+def _compare_row_table_cell(row: _CompareRow, field: str) -> str:
+    """Return the rendered compare-table cell text for *row* and *field*."""
+    if field == "task":
+        return _compare_row_table_number(row)
+    if field == "name":
+        return _compare_display_name(row)
+    if field == "description":
+        return row.description
+    if field == "offset":
+        return _format_compare_offset(row)
+
+    candidates: List[Task] = []
+    if row.actual is not None:
+        candidates.append(row.actual.task)
+    if row.planned is not None:
+        candidates.append(row.planned.task)
+
+    fallback: Any = None
+    for task in candidates:
+        value = _task_field_value(task, field)
+        if _has_table_value(value):
+            return _format_table_value(value)
+        if fallback is None:
+            fallback = value
+    return _format_table_value(fallback)
+
+
+def _table_cell_font_props(row, field: str, style: Style, font_props: FontProperties, bold_font_props: FontProperties) -> FontProperties:
+    """Return the font properties for a table cell."""
+    if field in ("task", "name") and (row.task.bold or (style.bold_tasks and row.depth == 0)):
+        return bold_font_props
+    return font_props
+
+
+def _fit_table_widths(
+    natural_widths: List[float],
+    min_widths: List[float],
+    total_width: float,
+    expand_index: int,
+) -> List[float]:
+    """Fit measured table widths into the available table width."""
+    if not natural_widths:
+        return []
+
+    widths = list(natural_widths)
+    current_total = sum(widths)
+    if current_total < total_width:
+        widths[expand_index] += total_width - current_total
+        return widths
+
+    overflow = current_total - total_width
+    reducible = [max(0.0, width - min_width) for width, min_width in zip(widths, min_widths)]
+    total_reducible = sum(reducible)
+    if total_reducible >= overflow and total_reducible > 0:
+        remaining = overflow
+        while remaining > 1e-6:
+            active = [index for index, room in enumerate(reducible) if room > 1e-6]
+            if not active:
+                break
+            active_total = sum(reducible[index] for index in active)
+            reduced = 0.0
+            for index in active:
+                share = remaining * (reducible[index] / active_total)
+                delta = min(share, reducible[index])
+                widths[index] -= delta
+                reducible[index] -= delta
+                reduced += delta
+            if reduced <= 1e-6:
+                break
+            remaining -= reduced
+        return widths
+
+    min_total = sum(min_widths)
+    if min_total <= 0:
+        return [total_width / len(min_widths)] * len(min_widths)
+    scale = total_width / min_total
+    return [min_width * scale for min_width in min_widths]
+
+
+def _measure_table_column_widths(
+    rows,
+    columns: List[Dict[str, str]],
+    style: Style,
+    table_width_in: float,
+    col_padding_in: float,
+    gutter_extra_in: float,
+    cell_value_fn,
+) -> List[float]:
+    """Return fitted column widths for a table."""
+    font_props = FontProperties(size=style.font_size, weight="normal")
+    bold_font_props = FontProperties(size=style.font_size, weight="bold")
+    natural_widths: List[float] = []
+    min_widths: List[float] = []
+
+    for index, column in enumerate(columns):
+        field = column["field"]
+        measured_width = _measure_text_width_in(column["title"], bold_font_props)
+        for row in rows:
+            cell_text = cell_value_fn(row, field)
+            cell_font_props = _table_cell_font_props(row, field, style, font_props, bold_font_props)
+            measured_width = max(measured_width, _measure_text_width_in(cell_text, cell_font_props))
+
+        width = measured_width + col_padding_in
+        min_width = _table_column_min_width(field)
+        if index == 0:
+            width += gutter_extra_in
+            min_width += gutter_extra_in
+
+        natural_widths.append(max(min_width, width))
+        min_widths.append(min_width)
+
+    return _fit_table_widths(natural_widths, min_widths, table_width_in, _table_expand_index(columns))
+
+
+def _wrap_table_rows(
+    rows,
+    columns: List[Dict[str, str]],
+    widths_in: List[float],
+    style: Style,
+    col_padding_in: float,
+    cell_value_fn,
+):
+    """Wrap table cell text to fitted widths and return row layout info."""
+    font_props = FontProperties(size=style.font_size, weight="normal")
+    bold_font_props = FontProperties(size=style.font_size, weight="bold")
+    wrapped_rows = []
+    total_units = 1.3
+
+    for row in rows:
+        wrapped_cells: List[List[str]] = []
+        line_count = 1
+        for column, width_in in zip(columns, widths_in):
+            field = column["field"]
+            cell_text = cell_value_fn(row, field)
+            cell_font_props = _table_cell_font_props(row, field, style, font_props, bold_font_props)
+            lines = _wrap_text_measured(cell_text, width_in - col_padding_in, cell_font_props)
+            wrapped_cells.append(lines)
+            line_count = max(line_count, len(lines))
+        row_units = line_count + 0.6
+        wrapped_rows.append((row, wrapped_cells, row_units))
+        total_units += row_units
+
+    return wrapped_rows, total_units
 
 
 # ---------------------------------------------------------------------------
@@ -250,11 +503,10 @@ def render_table(
     style = config.style
 
     if os.path.splitext(output_path)[1].lower() == ".csv":
-        _write_table_csv(rows, output_path)
+        _write_table_csv(rows, output_path, style)
         return
 
     fig_w = style.width
-    char_width_in = style.font_size * 0.55 / 72.0
     line_height_in = style.font_size * 1.5 / 72.0
     table_width_frac = 0.94
     table_width_in = fig_w * table_width_frac
@@ -263,61 +515,27 @@ def render_table(
     text_pad_frac = 0.014
     text_pad_in = table_width_in * text_pad_frac
     col_padding_in = text_pad_in * 2 + 0.05
-    min_desc_width_in = max(4.0, table_width_in * 0.45)
     has_table_gutter = style.table_colorize
     gutter_width_in = table_width_in * gutter_width_frac if has_table_gutter else 0.0
-
-    font_props = FontProperties(size=style.font_size, weight="normal")
-    bold_font_props = FontProperties(size=style.font_size, weight="bold")
-    number_width_in = max(
-        0.55,
-        _max_text_width_in([_row_table_number(row) for row in rows], font_props) + col_padding_in,
+    columns = _resolve_table_columns(style)
+    widths_in = _measure_table_column_widths(
+        rows,
+        columns,
+        style,
+        table_width_in,
+        col_padding_in,
+        (gutter_width_in + gutter_gap_in) if has_table_gutter else 0.0,
+        _row_table_cell,
     )
-    if has_table_gutter:
-        number_width_in += gutter_width_in + gutter_gap_in
-    name_width_in = max(
-        1.6,
-        max(
-            _measure_text_width_in(
-                row.task.name,
-                bold_font_props if (row.task.bold or (style.bold_tasks and row.depth == 0)) else font_props,
-            )
-            for row in rows
-        ) + col_padding_in,
+    fractions = [width_in / table_width_in for width_in in widths_in]
+    wrapped_rows, total_units = _wrap_table_rows(
+        rows,
+        columns,
+        widths_in,
+        style,
+        col_padding_in,
+        _row_table_cell,
     )
-
-    max_non_desc_width = max(2.6, table_width_in - min_desc_width_in)
-    non_desc_width = number_width_in + name_width_in
-    if non_desc_width > max_non_desc_width:
-        overflow = non_desc_width - max_non_desc_width
-        reducible_name = max(0.0, name_width_in - 1.6)
-        reduction = min(overflow, reducible_name)
-        name_width_in -= reduction
-        overflow -= reduction
-        if overflow > 0:
-            reducible_number = max(0.0, number_width_in - 0.55)
-            number_width_in -= min(overflow, reducible_number)
-
-    desc_width_in = max(2.6, table_width_in - number_width_in - name_width_in)
-
-    task_num_fraction = number_width_in / table_width_in
-    name_col_fraction = name_width_in / table_width_in
-    desc_col_fraction = desc_width_in / table_width_in
-
-    number_wrap_chars = max(4, int((number_width_in - col_padding_in) / char_width_in))
-    desc_wrap_chars = max(28, int((desc_width_in - col_padding_in) / char_width_in))
-
-    wrapped_rows = []
-    total_units = 1.3  # header row
-    for row in rows:
-        number_lines = _wrap_text(_row_table_number(row), number_wrap_chars)
-        row_font_props = bold_font_props if (row.task.bold or (style.bold_tasks and row.depth == 0)) else font_props
-        name_lines = _wrap_text_measured(row.task.name, name_width_in - col_padding_in, row_font_props)
-        desc_lines = _wrap_text_measured(row.task.description, desc_width_in - col_padding_in, font_props)
-        line_count = max(len(number_lines), len(name_lines), len(desc_lines), 1)
-        row_units = line_count + 0.6
-        wrapped_rows.append((row, number_lines, name_lines, desc_lines, row_units))
-        total_units += row_units
 
     fig_h = total_units * line_height_in + (0.8 if config.title else 0.35)
     fig = plt.figure(figsize=(fig_w, fig_h), facecolor=style.background)
@@ -342,34 +560,21 @@ def render_table(
     header_color = _darken(style.row_band_color, 0.08)
     divider_color = style.grid_color
     gutter_width = gutter_width_frac if has_table_gutter else 0.0
-    task_x_end = task_num_fraction
-    name_x_end = task_num_fraction + name_col_fraction
-    desc_x_start = name_x_end
-
-    ax.add_patch(mpatches.Rectangle(
-        (0, 0), task_x_end, 1.3,
-        facecolor=header_color,
-        edgecolor=divider_color,
-        linewidth=1.0,
-    ))
-    ax.add_patch(mpatches.Rectangle(
-        (task_x_end, 0), name_col_fraction, 1.3,
-        facecolor=header_color,
-        edgecolor=divider_color,
-        linewidth=1.0,
-    ))
-    ax.add_patch(mpatches.Rectangle(
-        (desc_x_start, 0), desc_col_fraction, 1.3,
-        facecolor=header_color,
-        edgecolor=divider_color,
-        linewidth=1.0,
-    ))
-    ax.text(text_pad_frac, 0.65, "Task", ha="left", va="center", fontsize=style.font_size, fontweight="bold")
-    ax.text(task_x_end + text_pad_frac, 0.65, "Name", ha="left", va="center", fontsize=style.font_size, fontweight="bold")
-    ax.text(desc_x_start + text_pad_frac, 0.65, "Description", ha="left", va="center", fontsize=style.font_size, fontweight="bold")
+    x_starts: List[float] = []
+    x = 0.0
+    for fraction, column in zip(fractions, columns):
+        x_starts.append(x)
+        ax.add_patch(mpatches.Rectangle(
+            (x, 0), fraction, 1.3,
+            facecolor=header_color,
+            edgecolor=divider_color,
+            linewidth=1.0,
+        ))
+        ax.text(x + text_pad_frac, 0.65, column["title"], ha="left", va="center", fontsize=style.font_size, fontweight="bold")
+        x += fraction
 
     y = 1.3
-    for row_index, (row, number_lines, name_lines, desc_lines, row_units) in enumerate(wrapped_rows):
+    for row_index, (row, wrapped_cells, row_units) in enumerate(wrapped_rows):
         band_color = style.background if row_index % 2 == 0 else style.row_band_color
 
         ax.add_patch(mpatches.Rectangle(
@@ -400,55 +605,29 @@ def render_table(
                 zorder=4,
             )
 
-        ax.plot([task_x_end, task_x_end], [y, y + row_units], color=divider_color, linewidth=1.0)
-        ax.plot([name_x_end, name_x_end], [y, y + row_units], color=divider_color, linewidth=1.0)
+        for boundary in x_starts[1:]:
+            ax.plot([boundary, boundary], [y, y + row_units], color=divider_color, linewidth=1.0)
 
         text_y = y + row_units / 2.0
         task_weight = "bold" if (row.task.bold or (style.bold_tasks and row.depth == 0)) else "normal"
-        number_clip = mpatches.Rectangle((0, y), task_x_end, row_units, transform=ax.transData)
-        name_clip = mpatches.Rectangle((task_x_end, y), name_col_fraction, row_units, transform=ax.transData)
-        desc_clip = mpatches.Rectangle((desc_x_start, y), desc_col_fraction, row_units, transform=ax.transData)
+        for column_index, (column, x_start, fraction, lines) in enumerate(zip(columns, x_starts, fractions, wrapped_cells)):
+            clip = mpatches.Rectangle((x_start, y), fraction, row_units, transform=ax.transData)
+            fontweight = task_weight if column["field"] in ("task", "name") else "normal"
+            text_x = max(x_start + text_pad_frac, gutter_width + 0.006) if column_index == 0 else x_start + text_pad_frac
+            cell_text = ax.text(
+                text_x,
+                text_y,
+                "\n".join(lines),
+                ha="left",
+                va="center",
+                fontsize=style.font_size,
+                fontweight=fontweight,
+                color="#111111",
+                linespacing=1.35,
+                clip_on=True,
+            )
+            cell_text.set_clip_path(clip)
 
-        number_text = ax.text(
-            max(text_pad_frac, gutter_width + 0.006),
-            text_y,
-            "\n".join(number_lines),
-            ha="left",
-            va="center",
-            fontsize=style.font_size,
-            fontweight=task_weight,
-            color="#111111",
-            linespacing=1.35,
-            clip_on=True,
-        )
-        number_text.set_clip_path(number_clip)
-
-        name_text = ax.text(
-            task_x_end + text_pad_frac,
-            text_y,
-            "\n".join(name_lines),
-            ha="left",
-            va="center",
-            fontsize=style.font_size,
-            fontweight=task_weight,
-            color="#111111",
-            linespacing=1.35,
-            clip_on=True,
-        )
-        name_text.set_clip_path(name_clip)
-
-        desc_text = ax.text(
-            desc_x_start + text_pad_frac,
-            text_y,
-            "\n".join(desc_lines),
-            ha="left",
-            va="center",
-            fontsize=style.font_size,
-            color="#111111",
-            linespacing=1.35,
-            clip_on=True,
-        )
-        desc_text.set_clip_path(desc_clip)
         y += row_units
 
     fig.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor=style.background)
@@ -572,11 +751,10 @@ def render_compare_table(
     style = planned_config.style
 
     if os.path.splitext(output_path)[1].lower() == ".csv":
-        _write_compare_table_csv(rows, output_path)
+        _write_compare_table_csv(rows, output_path, style)
         return
 
     fig_w = style.width
-    char_width_in = style.font_size * 0.55 / 72.0
     line_height_in = style.font_size * 1.5 / 72.0
     table_width_frac = 0.94
     table_width_in = fig_w * table_width_frac
@@ -585,71 +763,27 @@ def render_compare_table(
     text_pad_frac = 0.014
     text_pad_in = table_width_in * text_pad_frac
     col_padding_in = text_pad_in * 2 + 0.05
-    min_desc_width_in = max(3.0, table_width_in * 0.35)
-    min_offset_width_in = 1.2
     has_table_gutter = style.table_colorize
     gutter_width_in = table_width_in * gutter_width_frac if has_table_gutter else 0.0
-
-    font_props = FontProperties(size=style.font_size, weight="normal")
-    bold_font_props = FontProperties(size=style.font_size, weight="bold")
-    offsets = [_format_compare_offset(row) for row in rows]
-
-    number_width_in = max(
-        0.55,
-        _max_text_width_in([_compare_row_table_number(row) for row in rows] + ["Task"], font_props) + col_padding_in,
+    columns = _resolve_table_columns(style, include_offset=True)
+    widths_in = _measure_table_column_widths(
+        rows,
+        columns,
+        style,
+        table_width_in,
+        col_padding_in,
+        (gutter_width_in + gutter_gap_in) if has_table_gutter else 0.0,
+        _compare_row_table_cell,
     )
-    if has_table_gutter:
-        number_width_in += gutter_width_in + gutter_gap_in
-    name_width_in = max(
-        1.6,
-        max(
-            _measure_text_width_in(
-                _compare_display_name(row),
-                bold_font_props if (row.task.bold or (style.bold_tasks and row.depth == 0)) else font_props,
-            )
-            for row in rows
-        ) + col_padding_in,
+    fractions = [width_in / table_width_in for width_in in widths_in]
+    wrapped_rows, total_units = _wrap_table_rows(
+        rows,
+        columns,
+        widths_in,
+        style,
+        col_padding_in,
+        _compare_row_table_cell,
     )
-    offset_width_in = max(
-        min_offset_width_in,
-        _max_text_width_in(offsets + ["Offset"], font_props) + col_padding_in,
-    )
-
-    max_non_desc_width = max(3.4, table_width_in - min_desc_width_in)
-    non_desc_width = number_width_in + name_width_in + offset_width_in
-    if non_desc_width > max_non_desc_width:
-        overflow = non_desc_width - max_non_desc_width
-        reducible_name = max(0.0, name_width_in - 1.6)
-        reduction = min(overflow, reducible_name)
-        name_width_in -= reduction
-        overflow -= reduction
-        if overflow > 0:
-            reducible_offset = max(0.0, offset_width_in - min_offset_width_in)
-            offset_width_in -= min(overflow, reducible_offset)
-
-    desc_width_in = max(2.6, table_width_in - number_width_in - name_width_in - offset_width_in)
-
-    task_num_fraction = number_width_in / table_width_in
-    name_col_fraction = name_width_in / table_width_in
-    desc_col_fraction = desc_width_in / table_width_in
-    offset_col_fraction = offset_width_in / table_width_in
-
-    number_wrap_chars = max(4, int((number_width_in - col_padding_in) / char_width_in))
-    desc_wrap_chars = max(24, int((desc_width_in - col_padding_in) / char_width_in))
-    offset_wrap_chars = max(8, int((offset_width_in - col_padding_in) / char_width_in))
-
-    wrapped_rows = []
-    total_units = 1.3
-    for row in rows:
-        number_lines = _wrap_text(_compare_row_table_number(row), number_wrap_chars)
-        row_font_props = bold_font_props if (row.task.bold or (style.bold_tasks and row.depth == 0)) else font_props
-        name_lines = _wrap_text_measured(_compare_display_name(row), name_width_in - col_padding_in, row_font_props)
-        desc_lines = _wrap_text_measured(row.description, desc_width_in - col_padding_in, font_props)
-        offset_lines = _wrap_text(_format_compare_offset(row), offset_wrap_chars)
-        line_count = max(len(number_lines), len(name_lines), len(desc_lines), len(offset_lines), 1)
-        row_units = line_count + 0.6
-        wrapped_rows.append((row, number_lines, name_lines, desc_lines, offset_lines, row_units))
-        total_units += row_units
 
     title = _compare_title(planned_config, actual_config)
     fig_h = total_units * line_height_in + (0.8 if title else 0.35)
@@ -675,22 +809,16 @@ def render_compare_table(
     header_color = _darken(style.row_band_color, 0.08)
     divider_color = style.grid_color
     gutter_width = gutter_width_frac if has_table_gutter else 0.0
-    task_x_end = task_num_fraction
-    name_x_end = task_x_end + name_col_fraction
-    desc_x_end = name_x_end + desc_col_fraction
-    offset_x_start = desc_x_end
-
-    ax.add_patch(mpatches.Rectangle((0, 0), task_x_end, 1.3, facecolor=header_color, edgecolor=divider_color, linewidth=1.0))
-    ax.add_patch(mpatches.Rectangle((task_x_end, 0), name_col_fraction, 1.3, facecolor=header_color, edgecolor=divider_color, linewidth=1.0))
-    ax.add_patch(mpatches.Rectangle((name_x_end, 0), desc_col_fraction, 1.3, facecolor=header_color, edgecolor=divider_color, linewidth=1.0))
-    ax.add_patch(mpatches.Rectangle((offset_x_start, 0), offset_col_fraction, 1.3, facecolor=header_color, edgecolor=divider_color, linewidth=1.0))
-    ax.text(text_pad_frac, 0.65, "Task", ha="left", va="center", fontsize=style.font_size, fontweight="bold")
-    ax.text(task_x_end + text_pad_frac, 0.65, "Name", ha="left", va="center", fontsize=style.font_size, fontweight="bold")
-    ax.text(name_x_end + text_pad_frac, 0.65, "Description", ha="left", va="center", fontsize=style.font_size, fontweight="bold")
-    ax.text(offset_x_start + text_pad_frac, 0.65, "Offset", ha="left", va="center", fontsize=style.font_size, fontweight="bold")
+    x_starts: List[float] = []
+    x = 0.0
+    for fraction, column in zip(fractions, columns):
+        x_starts.append(x)
+        ax.add_patch(mpatches.Rectangle((x, 0), fraction, 1.3, facecolor=header_color, edgecolor=divider_color, linewidth=1.0))
+        ax.text(x + text_pad_frac, 0.65, column["title"], ha="left", va="center", fontsize=style.font_size, fontweight="bold")
+        x += fraction
 
     y = 1.3
-    for row_index, (row, number_lines, name_lines, desc_lines, offset_lines, row_units) in enumerate(wrapped_rows):
+    for row_index, (row, wrapped_cells, row_units) in enumerate(wrapped_rows):
         band_color = style.background if row_index % 2 == 0 else style.row_band_color
         ax.add_patch(mpatches.Rectangle((0, y), 1.0, row_units, facecolor=band_color, edgecolor=divider_color, linewidth=0.8))
 
@@ -712,75 +840,36 @@ def render_compare_table(
                 zorder=4,
             )
 
-        ax.plot([task_x_end, task_x_end], [y, y + row_units], color=divider_color, linewidth=1.0)
-        ax.plot([name_x_end, name_x_end], [y, y + row_units], color=divider_color, linewidth=1.0)
-        ax.plot([desc_x_end, desc_x_end], [y, y + row_units], color=divider_color, linewidth=1.0)
+        for boundary in x_starts[1:]:
+            ax.plot([boundary, boundary], [y, y + row_units], color=divider_color, linewidth=1.0)
 
         text_y = y + row_units / 2.0
         task_weight = "bold" if (row.task.bold or (style.bold_tasks and row.depth == 0)) else "normal"
-        number_clip = mpatches.Rectangle((0, y), task_x_end, row_units, transform=ax.transData)
-        name_clip = mpatches.Rectangle((task_x_end, y), name_col_fraction, row_units, transform=ax.transData)
-        desc_clip = mpatches.Rectangle((name_x_end, y), desc_col_fraction, row_units, transform=ax.transData)
-        offset_clip = mpatches.Rectangle((offset_x_start, y), offset_col_fraction, row_units, transform=ax.transData)
-
-        number_text = ax.text(
-            max(text_pad_frac, gutter_width + 0.006),
-            text_y,
-            "\n".join(number_lines),
-            ha="left",
-            va="center",
-            fontsize=style.font_size,
-            fontweight=task_weight,
-            color="#111111",
-            linespacing=1.35,
-            clip_on=True,
-        )
-        number_text.set_clip_path(number_clip)
-
-        name_text = ax.text(
-            task_x_end + text_pad_frac,
-            text_y,
-            "\n".join(name_lines),
-            ha="left",
-            va="center",
-            fontsize=style.font_size,
-            fontweight=task_weight,
-            color="#111111",
-            linespacing=1.35,
-            clip_on=True,
-        )
-        name_text.set_clip_path(name_clip)
-
-        desc_text = ax.text(
-            name_x_end + text_pad_frac,
-            text_y,
-            "\n".join(desc_lines),
-            ha="left",
-            va="center",
-            fontsize=style.font_size,
-            color="#111111",
-            linespacing=1.35,
-            clip_on=True,
-        )
-        desc_text.set_clip_path(desc_clip)
-
-        offset_text = ax.text(
-            offset_x_start + text_pad_frac,
-            text_y,
-            "\n".join(offset_lines),
-            ha="left",
-            va="center",
-            fontsize=style.font_size,
-            color="#111111",
-            linespacing=1.35,
-            clip_on=True,
-        )
-        offset_text.set_clip_path(offset_clip)
+        for column_index, (column, x_start, fraction, lines) in enumerate(zip(columns, x_starts, fractions, wrapped_cells)):
+            clip = mpatches.Rectangle((x_start, y), fraction, row_units, transform=ax.transData)
+            fontweight = task_weight if column["field"] in ("task", "name") else "normal"
+            text_x = max(x_start + text_pad_frac, gutter_width + 0.006) if column_index == 0 else x_start + text_pad_frac
+            cell_text = ax.text(
+                text_x,
+                text_y,
+                "\n".join(lines),
+                ha="left",
+                va="center",
+                fontsize=style.font_size,
+                fontweight=fontweight,
+                color="#111111",
+                linespacing=1.35,
+                clip_on=True,
+            )
+            cell_text.set_clip_path(clip)
 
         if row.is_removed:
             strike_font_props = FontProperties(size=style.font_size, weight=task_weight)
-            _draw_strike_line(ax, max(text_pad_frac, gutter_width + 0.006), text_y, " ".join(number_lines), strike_font_props)
-            _draw_strike_line(ax, task_x_end + text_pad_frac, text_y, " ".join(name_lines), strike_font_props)
+            for column_index, (column, x_start, lines) in enumerate(zip(columns, x_starts, wrapped_cells)):
+                if column["field"] == "offset":
+                    continue
+                strike_x = max(x_start + text_pad_frac, gutter_width + 0.006) if column_index == 0 else x_start + text_pad_frac
+                _draw_strike_line(ax, strike_x, text_y, " ".join(lines), strike_font_props)
 
         y += row_units
 
@@ -991,18 +1080,14 @@ def _filter_compare_rows_for_table(
     return rows
 
 
-def _write_compare_table_csv(rows: List[_CompareRow], output_path: str) -> None:
+def _write_compare_table_csv(rows: List[_CompareRow], output_path: str, style: Style) -> None:
     """Write compare table rows to *output_path* as CSV."""
+    columns = _resolve_table_columns(style, include_offset=True)
     with open(output_path, "w", encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["Task", "Name", "Description", "Offset"])
+        writer.writerow([column["title"] for column in columns])
         for row in rows:
-            writer.writerow([
-                _compare_row_table_number(row),
-                _compare_display_name(row),
-                row.description,
-                _format_compare_offset(row),
-            ])
+            writer.writerow([_compare_row_table_cell(row, column["field"]) for column in columns])
 
 
 def _compare_key(row: _Row) -> str:
@@ -1045,13 +1130,14 @@ def _merge_compare_rows(planned_rows: List[_Row], actual_rows: List[_Row]) -> Li
     return merged_rows
 
 
-def _write_table_csv(rows: List[_Row], output_path: str) -> None:
+def _write_table_csv(rows: List[_Row], output_path: str, style: Style) -> None:
     """Write table rows to *output_path* as CSV."""
+    columns = _resolve_table_columns(style)
     with open(output_path, "w", encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["Task", "Name", "Description"])
+        writer.writerow([column["title"] for column in columns])
         for row in rows:
-            writer.writerow([_row_table_number(row), row.task.name, row.task.description])
+            writer.writerow([_row_table_cell(row, column["field"]) for column in columns])
 
 
 # ---------------------------------------------------------------------------

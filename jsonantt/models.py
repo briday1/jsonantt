@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +63,7 @@ class Task:
     marker_size: Optional[float] = None  # override milestone diamond size (pts)
     marker: Optional[str] = None         # override milestone marker symbol
     bold: bool = False                    # render label in bold
+    fields: Dict[str, Any] = field(default_factory=dict)  # extra JSON fields available to tables
 
     # ------------------------------------------------------------------ #
     #  Computed properties                                                 #
@@ -121,6 +122,7 @@ class Style:
     table_colorize: bool = True       # show task colors in the table accent gutter
     table_show_markers: bool = True   # draw milestone diamonds in table output
     tick_position: str = "top"        # x-axis label position: "top", "bottom", or "both"
+    table_columns: List[Any] = field(default_factory=list)  # ordered table columns; empty keeps default columns
 
 
 @dataclass

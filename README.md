@@ -10,7 +10,7 @@ Charts are rendered with [matplotlib](https://matplotlib.org/) so they can be sa
 - **Infinitely nestable tasks** — define sub-tasks, sub-sub-tasks, etc.
 - **Auto date computation** — parent task start/end are derived automatically from children when not specified.
 - **Milestone markers** — easy `"milestone": true` flag with chart-level defaults and per-milestone marker overrides.
-- **Optional task descriptions** — add long-form context per task for table-style output.
+- **Optional task descriptions and extra fields** — add long-form context per task, plus arbitrary metadata like assignee or cost for table output.
 - **Fully colourable** — set colours per-task; children inherit their parent's colour.
 - **Recursive child colour lightening** — inherited subtask colours can optionally lighten at each nested level.
 - **Clean, indented y-axis labels** — task names are left-aligned with proper indentation per depth level.
@@ -103,7 +103,33 @@ render_compare_table(config, actual, "compare-table.csv", dpi=150)
 
 `render_depth=0` renders all nested levels. `1` renders only top-level tasks, `2` includes one level of children, and so on.
 
-`--table` / `-t` switches the output to a three-column table with `Task`, `Name`, and `Description`. The `Task` column keeps hierarchy numbering, the `Name` column stays unindented, `style.table_colorize` controls the side color accent, and `style.table_show_markers` controls whether milestone rows use a diamond marker in that gutter.
+`--table` / `-t` switches the output to a table view. By default it renders `Task`, `Name`, and `Description`. The `Task` column keeps hierarchy numbering, the `Name` column stays unindented, `style.table_colorize` controls the side color accent, and `style.table_show_markers` controls whether milestone rows use a diamond marker in that gutter.
+
+You can customize the table columns with `style.table_columns`. Each entry can be either a string field name or an object with `field` and optional `title`. The special fields `task`, `name`, and `description` preserve the existing behavior; any other field is read from the task object, including extra task keys like `assignee` or `cost`.
+
+```json
+{
+  "style": {
+    "table_columns": [
+      "task",
+      "name",
+      { "field": "assignee", "title": "Owner" },
+      { "field": "cost", "title": "Cost" },
+      "description"
+    ]
+  },
+  "tasks": [
+    {
+      "name": "API Design",
+      "start": "2024-01-01",
+      "end": "2024-01-10",
+      "assignee": "Morgan",
+      "cost": 1200,
+      "description": "Finalize endpoints and review contracts."
+    }
+  ]
+}
+```
 
 Description and Name cells wrap to the measured rendered width of the column, and the row height expands to fit the wrapped lines. Very long unbroken tokens are not split mid-word, so they can still clip horizontally.
 
@@ -134,6 +160,7 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 |-------|------|-------------|
 | `name` | string | **Required.** Task label |
 | `description` | string | Optional long-form text used by table output |
+| any other key | any JSON value | Preserved on the task and available to `style.table_columns` for table output |
 | `id` | string | Unique identifier used for `not_before` references |
 | `start` | date string | Bar start date |
 | `end` | date string | Bar end date |
@@ -178,6 +205,7 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 | `number_tasks` | `true` | Prefix task labels with hierarchy numbers like `1`, `1.1`, `1.2` |
 | `table_colorize` | `true` | Show a task-coloured accent bar in table output; when `false`, both accent bars and milestone markers are suppressed |
 | `table_show_markers` | `true` | Replace the accent bar with a milestone diamond for milestone rows in table output when table colours are enabled |
+| `table_columns` | `[]` | Ordered table column definitions. Empty means the default `Task`, `Name`, `Description` columns. Entries can be field-name strings or objects like `{ "field": "cost", "title": "Cost" }` |
 
 ---
 
@@ -271,6 +299,14 @@ CSV export:
 
 [examples/description-wrap-table.csv](https://github.com/briday1/jsonantt/blob/main/examples/description-wrap-table.csv)
 
+### Custom table fields
+
+[examples/costs.json](https://github.com/briday1/jsonantt/blob/main/examples/costs.json) — shows `style.table_columns` with custom `Owner` and `Cost` columns sourced from task fields like `assignee` and `cost`
+
+CSV export:
+
+[examples/costs-table.csv](https://github.com/briday1/jsonantt/blob/main/examples/costs-table.csv)
+
 ### Complex roadmap
 
 [examples/complex.json](https://github.com/briday1/jsonantt/blob/main/examples/complex.json) — a multi-year roadmap with deep nesting, task descriptions, and custom colours
@@ -308,6 +344,7 @@ jsonantt -t examples/compare-planned.json examples/compare-table.png --compare e
 jsonantt -t examples/compare-planned.json examples/compare-table.csv --compare examples/compare-actual.json # compare table CSV
 jsonantt -t examples/description-wrap.json examples/description-wrap-table.png # wrapped descriptions table image
 jsonantt -t examples/description-wrap.json examples/description-wrap-table.csv # wrapped descriptions CSV
+jsonantt -t examples/costs.json examples/costs-table.csv                # custom cost/owner columns CSV
 jsonantt examples/complex.json examples/complex.png                  # deep roadmap example
 jsonantt -t examples/complex.json examples/complex-table.png         # full complex table
 jsonantt -t --milestones-only examples/complex.json examples/complex-milestones.png # complex milestones only

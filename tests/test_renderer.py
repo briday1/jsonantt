@@ -523,6 +523,40 @@ class TestRenderTable:
             if os.path.exists(path):
                 os.unlink(path)
 
+    def test_render_table_csv_with_custom_columns_and_fields(self):
+        cfg = parse_chart(
+            {
+                "style": {
+                    "table_columns": [
+                        "task",
+                        "name",
+                        {"field": "assignee", "title": "Assignee"},
+                        {"field": "cost", "title": "Cost"},
+                    ]
+                },
+                "tasks": [
+                    {
+                        "name": "Task A",
+                        "start": "2024-01-01",
+                        "end": "2024-01-05",
+                        "assignee": "Morgan",
+                        "cost": 1200,
+                    }
+                ],
+            }
+        )
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            render_table(cfg, path, dpi=72)
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            assert "Task,Name,Assignee,Cost" in content
+            assert "1.,Task A,Morgan,1200" in content
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
     def test_render_table_with_limited_depth(self):
         self._render(_config_with_children(), ".png", render_depth=1)
 
@@ -666,6 +700,52 @@ class TestRenderCompare:
             assert "2.,Build,Baseline build window.,Removed" in content
             assert "3.,Release,Gate slipped by one day.,+1d" in content
             assert "3.,(Hardening),Unplanned stabilization task.,Added" in content
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_compare_table_csv_with_custom_columns(self):
+        planned = parse_chart(
+            {
+                "style": {
+                    "table_columns": [
+                        "task",
+                        "name",
+                        {"field": "assignee", "title": "Assignee"},
+                    ]
+                },
+                "tasks": [
+                    {
+                        "id": "design",
+                        "name": "Design",
+                        "start": "2024-01-01",
+                        "end": "2024-01-10",
+                        "assignee": "Planned Owner",
+                    }
+                ],
+            }
+        )
+        actual = parse_chart(
+            {
+                "tasks": [
+                    {
+                        "id": "design",
+                        "name": "Design",
+                        "start": "2024-01-01",
+                        "end": "2024-01-12",
+                        "assignee": "Actual Owner",
+                    }
+                ],
+            }
+        )
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            render_compare_table(planned, actual, path, dpi=72)
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            assert "Task,Name,Assignee,Offset" in content
+            assert "1.,Design,Actual Owner,+2d" in content
         finally:
             if os.path.exists(path):
                 os.unlink(path)

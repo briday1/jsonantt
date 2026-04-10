@@ -97,6 +97,7 @@ def _parse_style(data: Dict[str, Any]) -> Style:
         "table_colorize": "table_colorize",
         "table_show_markers": "table_show_markers",
         "tick_position": "tick_position",
+        "table_columns": "table_columns",
     }
     for json_key, attr in mapping.items():
         if json_key in data:
@@ -146,6 +147,28 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
         for child in data.get("children", [])
     ]
 
+    known_fields = {
+        "name",
+        "description",
+        "id",
+        "start",
+        "end",
+        "duration",
+        "not_before",
+        "color",
+        "milestone",
+        "date",
+        "marker",
+        "marker_size",
+        "bold",
+        "children",
+    }
+    extra_fields = {
+        key: value
+        for key, value in data.items()
+        if key not in known_fields
+    }
+
     return Task(
         name=name,
         description=description,
@@ -161,6 +184,7 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
         marker_size=marker_size,
         marker=marker,
         bold=bold,
+        fields=extra_fields,
     )
 
 

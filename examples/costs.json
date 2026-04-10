@@ -1,0 +1,71 @@
+{
+  "title": "Budgeted Delivery Plan",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "width": 12,
+    "font_size": 11,
+    "major_tick": "month",
+    "minor_tick": "week",
+    "table_columns": [
+      "task",
+      "name",
+      { "field": "assignee", "title": "Owner" },
+      { "field": "cost", "title": "Cost" },
+      "description"
+    ]
+  },
+  "tasks": [
+    {
+      "name": "Discovery",
+      "description": "Clarify scope, identify risk, and prepare the delivery baseline.",
+      "children": [
+        {
+          "name": "Stakeholder interviews",
+          "start": "2024-04-01",
+          "end": "2024-04-05",
+          "assignee": "Morgan",
+          "cost": "$1,200",
+          "description": "Interview sponsors and operators to confirm requirements and constraints."
+        },
+        {
+          "name": "Solution outline",
+          "start": "2024-04-08",
+          "end": "2024-04-12",
+          "assignee": "Riley",
+          "cost": "$1,800",
+          "description": "Draft the technical shape, delivery phases, and milestone plan."
+        }
+      ]
+    },
+    {
+      "name": "Implementation",
+      "description": "Build the approved scope and verify it against the release criteria.",
+      "children": [
+        {
+          "name": "Backend services",
+          "start": "2024-04-15",
+          "end": "2024-05-03",
+          "assignee": "Casey",
+          "cost": "$6,400",
+          "description": "Implement APIs, orchestration, and deployment support."
+        },
+        {
+          "name": "Frontend workflows",
+          "start": "2024-04-22",
+          "end": "2024-05-10",
+          "assignee": "Jordan",
+          "cost": "$5,750",
+          "description": "Ship the operator screens and user-facing polish for launch."
+        },
+        {
+          "name": "Go-live review",
+          "milestone": true,
+          "date": "2024-05-13",
+          "assignee": "Avery",
+          "cost": "$500",
+          "description": "Decision point for release readiness and launch approval."
+        }
+      ]
+    }
+  ]
+}
