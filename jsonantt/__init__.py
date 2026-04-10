@@ -2,7 +2,7 @@
 
 Quick-start example::
 
-    from jsonantt import load_chart, render_chart, render_compare_chart, render_compare_table, render_table
+    from jsonantt import load_chart, render_burn_chart, render_burn_table, render_chart, render_compare_chart, render_compare_table, render_table
 
     config = load_chart("project.json")
     actual = load_chart("project-actual.json")
@@ -13,6 +13,8 @@ Quick-start example::
     render_compare_table(config, actual, "compare-table.png")
     render_table(config, "milestones.png", milestones_only=True)
     render_table(config, "tasks-no-milestones.png", no_milestones=True)
+    render_burn_chart(config, "burn.png", field="cost", period="month", group_by=0)
+    render_burn_table(config, "burn-table.csv", field="cost", period="quarter", group_by=0)
 
 Or from the command line::
 
@@ -25,11 +27,13 @@ Or from the command line::
     jsonantt --table --no-milestones project.json tasks-no-milestones.png
 """
 from .parser import load_chart, parse_chart
-from .renderer import render_chart, render_compare_chart, render_compare_table, render_table
+from .renderer import render_burn_chart, render_burn_table, render_chart, render_compare_chart, render_compare_table, render_table
 
 __all__ = [
     "load_chart",
     "parse_chart",
+    "render_burn_chart",
+    "render_burn_table",
     "render_chart",
     "render_compare_chart",
     "render_compare_table",

@@ -6,7 +6,7 @@ from datetime import date, datetime
 import sys
 
 from .parser import load_chart
-from .renderer import render_chart, render_compare_chart, render_compare_table, render_table
+from .renderer import render_burn_chart, render_burn_table, render_chart, render_compare_chart, render_compare_table, render_table
 
 
 def _parse_cli_date(value: str, date_format: str) -> date:
@@ -24,6 +24,8 @@ def main(argv=None) -> int:
             "Examples:\n"
             "  jsonantt project.json chart.png\n"
             "  jsonantt -t project.json task-table.png\n"
+            "  jsonantt --burn project.json burn.png --burn-field cost --burn-period month --burn-group 0\n"
+            "  jsonantt --burn-table project.json burn-table.csv --burn-field cost --burn-period year --burn-group 0\n"
             "  jsonantt project-agreed.json compare.png --compare project-actual.json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -50,10 +52,41 @@ def main(argv=None) -> int:
             "top-level tasks, 2 includes one level of children, and so on"
         ),
     )
-    parser.add_argument(
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "-t", "--table",
         action="store_true",
         help="Render a task table instead of a Gantt chart",
+    )
+    mode_group.add_argument(
+        "--burn",
+        action="store_true",
+        help="Render a funded burn chart from a numeric task field",
+    )
+    mode_group.add_argument(
+        "--burn-table",
+        action="store_true",
+        help="Render a funded burn matrix table with time buckets as columns",
+    )
+    parser.add_argument(
+        "--burn-field",
+        default="cost",
+        help="Numeric task field to use for burn output (default: cost)",
+    )
+    parser.add_argument(
+        "--burn-period",
+        default="month",
+        help="Burn reporting period: day, week, month, quarter, or year (default: month)",
+    )
+    parser.add_argument(
+        "--burn-group",
+        default="0",
+        help="Burn grouping: total, leaf, or a non-negative depth integer where 0 is top-level (default: 0)",
+    )
+    parser.add_argument(
+        "--burn-display-factor",
+        default="1",
+        help="Display-only numeric multiplier applied once to burn output values (default: 1)",
     )
     parser.add_argument(
         "--date-line",
@@ -103,6 +136,9 @@ def main(argv=None) -> int:
         if args.table:
             print("error: --date-line is only supported for chart output", file=sys.stderr)
             return 1
+        if args.burn or args.burn_table:
+            print("error: --date-line is only supported for Gantt chart output", file=sys.stderr)
+            return 1
         try:
             line_date = _parse_cli_date(args.date_line, config.date_format)
         except ValueError as exc:
@@ -114,6 +150,11 @@ def main(argv=None) -> int:
         if line_date is not None:
             render_kwargs["date_line"] = line_date
             render_kwargs["date_line_color"] = args.date_line_color
+        if args.burn or args.burn_table:
+            if compare_config is not None:
+                raise ValueError("compare mode is not supported for burn output")
+            if args.milestones_only or args.no_milestones:
+                raise ValueError("milestone filters are only supported with --table")
         if args.table:
             render_kwargs["milestones_only"] = args.milestones_only
             render_kwargs["no_milestones"] = args.no_milestones
@@ -122,21 +163,49 @@ def main(argv=None) -> int:
         elif args.no_milestones:
             raise ValueError("--no-milestones requires --table")
 
-        if compare_config is not None:
+        if args.burn:
+            render_burn_chart(
+                config,
+                args.output,
+                dpi=args.dpi,
+                field=args.burn_field,
+                period=args.burn_period,
+                group_by=args.burn_group,
+                display_factor=args.burn_display_factor,
+            )
+        elif args.burn_table:
+            render_burn_table(
+                config,
+                args.output,
+                dpi=args.dpi,
+                field=args.burn_field,
+                period=args.burn_period,
+                group_by=args.burn_group,
+                display_factor=args.burn_display_factor,
+            )
+        elif compare_config is not None:
             render_fn = render_compare_table if args.table else render_compare_chart
             render_fn(config, compare_config, args.output, **render_kwargs)
         else:
             render_fn = render_table if args.table else render_chart
             render_fn(config, args.output, **render_kwargs)
     except Exception as exc:  # noqa: BLE001
-        target = "compare table" if args.table and compare_config is not None else (
-            "compare chart" if compare_config is not None else ("table" if args.table else "chart")
+        target = "burn table" if args.burn_table else (
+            "burn chart" if args.burn else (
+                "compare table" if args.table and compare_config is not None else (
+                    "compare chart" if compare_config is not None else ("table" if args.table else "chart")
+                )
+            )
         )
         print(f"error: failed to render {target}: {exc}", file=sys.stderr)
         return 1
 
-    target = "Compare table" if args.table and compare_config is not None else (
-        "Compare chart" if compare_config is not None else ("Table" if args.table else "Chart")
+    target = "Burn table" if args.burn_table else (
+        "Burn chart" if args.burn else (
+            "Compare table" if args.table and compare_config is not None else (
+                "Compare chart" if compare_config is not None else ("Table" if args.table else "Chart")
+            )
+        )
     )
     print(f"{target} saved to {args.output}")
     return 0

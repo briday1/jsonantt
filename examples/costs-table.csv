@@ -1,8 +1,9 @@
-Task,Name,Owner,Cost,Description
-1.,Discovery,,,"Clarify scope, identify risk, and prepare the delivery baseline."
-1.1,Stakeholder interviews,Morgan,"$1,200",Interview sponsors and operators to confirm requirements and constraints.
-1.2,Solution outline,Riley,"$1,800","Draft the technical shape, delivery phases, and milestone plan."
-2.,Implementation,,,Build the approved scope and verify it against the release criteria.
-2.1,Backend services,Casey,"$6,400","Implement APIs, orchestration, and deployment support."
-2.2,Frontend workflows,Jordan,"$5,750",Ship the operator screens and user-facing polish for launch.
-2.3,Go-live review,Avery,$500,Decision point for release readiness and launch approval.
+Task,Name,Owner,Cost (k$),Description
+1.,Discovery,,$3,"Clarify scope, identify risk, and prepare the delivery baseline."
+1.1,Stakeholder interviews,Morgan,$1.2,Interview sponsors and operators to confirm requirements and constraints.
+1.2,Solution outline,Riley,$1.8,"Draft the technical shape, delivery phases, and milestone plan."
+2.,Implementation,,$12.65,Build the approved scope and verify it against the release criteria.
+2.1,Backend services,Casey,$6.4,"Implement APIs, orchestration, and deployment support."
+2.2,Frontend workflows,Jordan,$5.75,Ship the operator screens and user-facing polish for launch.
+2.3,Go-live review,Avery,$0.5,Decision point for release readiness and launch approval.
+,Total,,$15.65,

@@ -15,6 +15,7 @@ Charts are rendered with [matplotlib](https://matplotlib.org/) so they can be sa
 - **Recursive child colour lightening** — inherited subtask colours can optionally lighten at each nested level.
 - **Clean, indented y-axis labels** — task names are left-aligned with proper indentation per depth level.
 - **Table output mode** — render a task summary table with the same hierarchy and colour cues.
+- **Funded burn output** — render cost-over-time charts and period matrix tables from numeric task fields.
 - **PNG / PDF / SVG output** — whatever matplotlib supports.
 
 ---
@@ -84,13 +85,15 @@ jsonantt -t project.json project-table.png   # task name / description table
 jsonantt -t project.json project-table.csv   # CSV table export
 jsonantt agreed.json compare.png --compare actual.json   # outline vs actual compare chart
 jsonantt -t agreed.json compare-table.csv --compare actual.json   # compare table with signed offsets
+jsonantt --burn project.json burn.png --burn-field cost --burn-period month --burn-group 0
+jsonantt --burn-table project.json burn-table.csv --burn-field cost --burn-period quarter --burn-group 0
 jsonantt project.json project.png --date-line today --date-line-color "#C00000"   # single target line
 ```
 
 **Python API:**
 
 ```python
-from jsonantt import load_chart, render_chart, render_compare_chart, render_compare_table, render_table
+from jsonantt import load_chart, render_burn_chart, render_burn_table, render_chart, render_compare_chart, render_compare_table, render_table
 
 config = load_chart("project.json")
 actual = load_chart("actual.json")
@@ -99,13 +102,19 @@ render_chart(config, "summary.png", dpi=150, render_depth=1)
 render_table(config, "project-table.png", dpi=150)
 render_compare_chart(config, actual, "compare.png", dpi=150)
 render_compare_table(config, actual, "compare-table.csv", dpi=150)
+render_burn_chart(config, "burn.png", dpi=150, field="cost", period="month", group_by=0)
+render_burn_table(config, "burn-table.csv", dpi=150, field="cost", period="quarter", group_by=0)
 ```
 
 `render_depth=0` renders all nested levels. `1` renders only top-level tasks, `2` includes one level of children, and so on.
 
 `--table` / `-t` switches the output to a table view. By default it renders `Task`, `Name`, and `Description`. The `Task` column keeps hierarchy numbering, the `Name` column stays unindented, `style.table_colorize` controls the side color accent, and `style.table_show_markers` controls whether milestone rows use a diamond marker in that gutter.
 
-You can customize the table columns with `style.table_columns`. Each entry can be either a string field name or an object with `field` and optional `title`. The special fields `task`, `name`, and `description` preserve the existing behavior; any other field is read from the task object, including extra task keys like `assignee` or `cost`.
+You can customize the table columns with `style.table_columns`. Each entry can be either a string field name or an object with `field` and optional `title`. The special fields `task`, `name`, and `description` preserve the existing behavior; any other field is read from the task object, including extra task keys like `assignee`, `cost`, or `fte`.
+
+Column objects can also opt into numeric aggregation. Use `rollup: "sum"` to show a recursively summed value on parent rows, `total: true` to add a footer total for that column, and `total_level` to control which task depth contributes to that footer. When `rollup` is enabled, totals default to depth `0` so parent rollups are not double-counted.
+
+For display-only unit conversion, set `display_factor` on the column. This multiplies the numeric value one time at render/export time, after the raw value has been read and after any rollup sum has been calculated. That makes it suitable both for converting FTE into annual dollars and for showing large values in `k` or `M` units by pairing a factor with a custom header title.
 
 ```json
 {
@@ -114,7 +123,7 @@ You can customize the table columns with `style.table_columns`. Each entry can b
       "task",
       "name",
       { "field": "assignee", "title": "Owner" },
-      { "field": "cost", "title": "Cost" },
+      { "field": "fte", "title": "Annual Cost ($)", "rollup": "sum", "total": true, "total_level": 0, "display_factor": 250000 },
       "description"
     ]
   },
@@ -124,12 +133,18 @@ You can customize the table columns with `style.table_columns`. Each entry can b
       "start": "2024-01-01",
       "end": "2024-01-10",
       "assignee": "Morgan",
-      "cost": 1200,
+      "fte": 1.2,
       "description": "Finalize endpoints and review contracts."
     }
   ]
 }
 ```
+
+Examples:
+
+- FTE to annualized dollars: `{ "field": "fte", "title": "Annual Cost ($)", "display_factor": 250000 }`
+- Dollars to thousands: `{ "field": "cost", "title": "Cost (k$)", "display_factor": 0.001 }`
+- Dollars to millions: `{ "field": "cost", "title": "Cost ($M)", "display_factor": 0.000001 }`
 
 Description and Name cells wrap to the measured rendered width of the column, and the row height expands to fit the wrapped lines. Very long unbroken tokens are not split mid-word, so they can still clip horizontally.
 
@@ -138,6 +153,10 @@ Description and Name cells wrap to the measured rendered width of the column, an
 If the table output path ends in `.csv`, `jsonantt` writes CSV instead of an image.
 
 `--compare` turns the first JSON input into the planned/agreed baseline and overlays the second JSON as the updated/actual state. In compare charts, planned bars are drawn as slightly larger unfilled outlines, actual bars are drawn normally, removed planned tasks are struck through with no actual bar, and actual-only tasks render as normal filled bars. In compare tables and CSV output, the `Offset` column shows signed duration changes like `+2d`, `-1w`, `+3mo`, or `+1y`; milestones use the signed date shift instead.
+
+`--burn` renders a funded burn chart from a numeric task field such as `cost`. Burn output always allocates from the lowest tasks that actually carry a numeric value, spreads each task uniformly over its duration, and only then groups the result. That means collapsing to top-level or total views does not lose deeper task spend.
+
+Use `--burn-period` to choose `day`, `week`, `month`, `quarter`, or `year`. Use `--burn-group total` for one overall series, `--burn-group leaf` for the lowest direct-cost tasks, or a depth integer where `0` is top-level, `1` is subtasks, `2` is sub-subtasks, and so on. `--burn-table` renders the same burn data as a matrix with one row per grouped task and one column per time bucket. `--burn-display-factor` applies a display-only multiplier once, after burn allocation, so the same scaling rules used for cost tables also work here.
 
 Use `--date-line` to draw a single vertical reference line on chart outputs. It accepts either a date in the input file's `dateformat` or the special value `today`. Use `--date-line-color` to control its color.
 
@@ -205,7 +224,7 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 | `number_tasks` | `true` | Prefix task labels with hierarchy numbers like `1`, `1.1`, `1.2` |
 | `table_colorize` | `true` | Show a task-coloured accent bar in table output; when `false`, both accent bars and milestone markers are suppressed |
 | `table_show_markers` | `true` | Replace the accent bar with a milestone diamond for milestone rows in table output when table colours are enabled |
-| `table_columns` | `[]` | Ordered table column definitions. Empty means the default `Task`, `Name`, `Description` columns. Entries can be field-name strings or objects like `{ "field": "cost", "title": "Cost" }` |
+| `table_columns` | `[]` | Ordered table column definitions. Empty means the default `Task`, `Name`, `Description` columns. Entries can be field-name strings or objects like `{ "field": "cost", "title": "Cost (k$)", "rollup": "sum", "total": true, "total_level": 0, "display_factor": 0.001 }` |
 
 ---
 
@@ -264,6 +283,18 @@ jsonantt -t --milestones-only examples/renderdepth.json examples/renderdepth-mil
 jsonantt -t --no-milestones examples/renderdepth.json examples/renderdepth-no-milestones.png # exclude milestones
 jsonantt -t examples/renderdepth.json examples/renderdepth-table.csv # CSV table export
 ```
+
+### Funding burn
+
+[examples/funding.json](https://github.com/briday1/jsonantt/blob/main/examples/funding.json) — direct task costs allocated uniformly over time, then grouped into top-level burn output
+
+Monthly burn chart, `--burn --burn-period month --burn-group 0`:
+
+![funding burn](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/funding-burn.png)
+
+Quarter burn table, `--burn-table --burn-period quarter --burn-group 0`:
+
+![funding burn table](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/funding-burn-table.png)
 
 ### Color schemes
 

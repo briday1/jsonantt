@@ -1,0 +1,50 @@
+{
+  "title": "Funding Plan",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "width": 12,
+    "font_size": 11,
+    "major_tick": "month",
+    "minor_tick": "week"
+  },
+  "tasks": [
+    {
+      "name": "Discovery",
+      "children": [
+        {
+          "name": "Research",
+          "start": "2024-01-01",
+          "end": "2024-02-01",
+          "cost": "$100",
+          "description": "Validate user needs, operating constraints, and delivery assumptions."
+        },
+        {
+          "name": "Scope",
+          "start": "2024-02-01",
+          "end": "2024-03-01",
+          "cost": "$120",
+          "description": "Define the release scope, milestones, and working plan."
+        }
+      ]
+    },
+    {
+      "name": "Delivery",
+      "children": [
+        {
+          "name": "Build",
+          "start": "2024-03-01",
+          "end": "2024-05-01",
+          "cost": "$300",
+          "description": "Implement the approved scope across the planned delivery window."
+        },
+        {
+          "name": "Launch",
+          "milestone": true,
+          "date": "2024-05-15",
+          "cost": "$80",
+          "description": "Release checkpoint and production readiness approval."
+        }
+      ]
+    }
+  ]
+}

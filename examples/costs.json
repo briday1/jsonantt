@@ -10,7 +10,7 @@
       "task",
       "name",
       { "field": "assignee", "title": "Owner" },
-      { "field": "cost", "title": "Cost" },
+      { "field": "cost", "title": "Cost (k$)", "rollup": "sum", "total": true, "total_level": 0, "display_factor": 0.001 },
       "description"
     ]
   },

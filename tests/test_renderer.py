@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from decimal import Decimal
 from datetime import date
 
 import pytest
@@ -10,6 +11,7 @@ import pytest
 from jsonantt.models import ChartConfig, Style, Task
 from jsonantt.parser import parse_chart
 from jsonantt.renderer import (
+    _build_burn_matrix,
     _compute_chart_label_layout,
     _compare_row_label_text,
     _darken,
@@ -21,6 +23,8 @@ from jsonantt.renderer import (
     _prepare_compare_rows,
     _row_label_text,
     _row_table_number,
+    render_burn_chart,
+    render_burn_table,
     render_chart,
     render_compare_chart,
     render_compare_table,
@@ -88,6 +92,30 @@ def _actual_compare_config() -> ChartConfig:
                 {"id": "design", "name": "Design", "description": "Design finished on plan.", "start": "2024-01-01", "end": "2024-01-12"},
                 {"id": "release", "name": "Release", "description": "Gate slipped by one day.", "milestone": True, "date": "2024-01-22"},
                 {"id": "hardening", "name": "Hardening", "description": "Unplanned stabilization task.", "start": "2024-01-23", "end": "2024-01-29"},
+            ],
+        }
+    )
+
+
+def _burn_config() -> ChartConfig:
+    return parse_chart(
+        {
+            "title": "Funding Plan",
+            "tasks": [
+                {
+                    "name": "Discovery",
+                    "children": [
+                        {"name": "Research", "start": "2024-01-01", "end": "2024-02-01", "cost": "$100"},
+                        {"name": "Scope", "start": "2024-02-01", "end": "2024-03-01", "cost": "$120"},
+                    ],
+                },
+                {
+                    "name": "Delivery",
+                    "children": [
+                        {"name": "Build", "start": "2024-03-01", "end": "2024-05-01", "cost": "$300"},
+                        {"name": "Launch", "milestone": True, "date": "2024-05-15", "cost": "$80"},
+                    ],
+                },
             ],
         }
     )
@@ -557,6 +585,152 @@ class TestRenderTable:
             if os.path.exists(path):
                 os.unlink(path)
 
+    def test_render_table_csv_with_display_factor(self):
+        cfg = parse_chart(
+            {
+                "style": {
+                    "table_columns": [
+                        "task",
+                        "name",
+                        {"field": "fte", "title": "Annual Cost", "display_factor": 250000},
+                    ]
+                },
+                "tasks": [
+                    {
+                        "name": "Task A",
+                        "start": "2024-01-01",
+                        "end": "2024-01-05",
+                        "fte": 1.5,
+                    }
+                ],
+            }
+        )
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            render_table(cfg, path, dpi=72)
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            assert "Task,Name,Annual Cost" in content
+            assert "1.,Task A,375000.0" in content
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_table_csv_with_rollup_and_footer_total(self):
+        cfg = parse_chart(
+            {
+                "style": {
+                    "table_columns": [
+                        "task",
+                        "name",
+                        {"field": "cost", "title": "Cost", "rollup": "sum", "total": True, "total_level": 0},
+                    ]
+                },
+                "tasks": [
+                    {
+                        "name": "Parent",
+                        "children": [
+                            {"name": "Child A", "start": "2024-01-01", "end": "2024-01-02", "cost": "$100"},
+                            {"name": "Child B", "start": "2024-01-03", "end": "2024-01-04", "cost": "$150"},
+                        ],
+                    },
+                    {"name": "Standalone", "start": "2024-01-05", "end": "2024-01-06", "cost": "$50"},
+                ],
+            }
+        )
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            render_table(cfg, path, dpi=72)
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            assert "Task,Name,Cost" in content
+            assert "1.,Parent,$250" in content
+            assert "1.1,Child A,$100" in content
+            assert "2.,Standalone,$50" in content
+            assert ",Total,$300" in content
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_table_csv_with_rollup_total_and_display_factor(self):
+        cfg = parse_chart(
+            {
+                "style": {
+                    "table_columns": [
+                        "task",
+                        "name",
+                        {
+                            "field": "fte",
+                            "title": "Annual Cost ($)",
+                            "rollup": "sum",
+                            "total": True,
+                            "total_level": 0,
+                            "display_factor": 250000,
+                        },
+                    ]
+                },
+                "tasks": [
+                    {
+                        "name": "Parent",
+                        "children": [
+                            {"name": "Child A", "start": "2024-01-01", "end": "2024-01-02", "fte": 1.0},
+                            {"name": "Child B", "start": "2024-01-03", "end": "2024-01-04", "fte": 1.5},
+                        ],
+                    },
+                    {"name": "Standalone", "start": "2024-01-05", "end": "2024-01-06", "fte": 0.5},
+                ],
+            }
+        )
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            render_table(cfg, path, dpi=72)
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            assert "Task,Name,Annual Cost ($)" in content
+            assert "1.,Parent,625000.0" in content
+            assert "1.1,Child A,250000" in content
+            assert "1.2,Child B,375000.0" in content
+            assert "2.,Standalone,125000.0" in content
+            assert ",Total,750000.0" in content
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_table_csv_with_display_factor_for_thousands(self):
+        cfg = parse_chart(
+            {
+                "style": {
+                    "table_columns": [
+                        "task",
+                        "name",
+                        {"field": "cost", "title": "Cost (k$)", "display_factor": 0.001},
+                    ]
+                },
+                "tasks": [
+                    {
+                        "name": "Task A",
+                        "start": "2024-01-01",
+                        "end": "2024-01-05",
+                        "cost": "$125,000",
+                    }
+                ],
+            }
+        )
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            render_table(cfg, path, dpi=72)
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            assert "Task,Name,Cost (k$)" in content
+            assert "1.,Task A,$125" in content
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
     def test_render_table_with_limited_depth(self):
         self._render(_config_with_children(), ".png", render_depth=1)
 
@@ -609,6 +783,72 @@ class TestRenderTable:
             if os.path.exists(path):
                 os.unlink(path)
 
+
+class TestBurnOutput:
+    def test_build_burn_matrix_groups_leaf_costs_to_top_level(self):
+        burn = _build_burn_matrix(_burn_config(), field="cost", period="month", group_by=0)
+        assert [period["label"] for period in burn["periods"]] == ["2024-01", "2024-02", "2024-03", "2024-04", "2024-05"]
+        assert [series["name"] for series in burn["series"]] == ["Discovery", "Delivery"]
+        discovery = burn["series"][0]["values"]
+        delivery = burn["series"][1]["values"]
+        assert discovery[0].quantize(Decimal("0.01")) == Decimal("100.00")
+        assert discovery[1].quantize(Decimal("0.01")) == Decimal("120.00")
+        assert delivery[2].quantize(Decimal("0.01")) == Decimal("152.46")
+        assert delivery[3].quantize(Decimal("0.01")) == Decimal("147.54")
+        assert delivery[4].quantize(Decimal("0.01")) == Decimal("80.00")
+        assert sum(burn["totals"], Decimal("0")).quantize(Decimal("0.01")) == Decimal("600.00")
+
+    def test_build_burn_matrix_supports_leaf_grouping(self):
+        burn = _build_burn_matrix(_burn_config(), field="cost", period="quarter", group_by="leaf")
+        assert [period["label"] for period in burn["periods"]] == ["2024-Q1", "2024-Q2"]
+        assert [series["name"] for series in burn["series"]] == ["Research", "Scope", "Build", "Launch"]
+        assert burn["series"][0]["values"][0].quantize(Decimal("0.01")) == Decimal("100.00")
+        assert burn["series"][2]["values"][0].quantize(Decimal("0.01")) == Decimal("152.46")
+        assert burn["series"][2]["values"][1].quantize(Decimal("0.01")) == Decimal("147.54")
+        assert burn["totals"][0].quantize(Decimal("0.01")) == Decimal("372.46")
+        assert burn["totals"][1].quantize(Decimal("0.01")) == Decimal("227.54")
+
+    def test_render_burn_table_csv_with_quarter_columns(self):
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            render_burn_table(_burn_config(), path, dpi=72, field="cost", period="quarter", group_by=0)
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            assert "Task,Name,2024-Q1,2024-Q2" in content
+            assert "1.,Discovery,$220,$0" in content
+            assert "2.,Delivery,$152,$228" in content
+            assert ",Total,$372,$228" in content
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_burn_table_csv_with_display_factor(self):
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            render_burn_table(_burn_config(), path, dpi=72, field="cost", period="quarter", group_by=0, display_factor="0.001")
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            assert "Task,Name,2024-Q1,2024-Q2" in content
+            assert "1.,Discovery,$0.22,$0" in content
+            assert "2.,Delivery,$0.152,$0.228" in content
+            assert ",Total,$0.372,$0.228" in content
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_burn_chart_png(self):
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            render_burn_chart(_burn_config(), path, dpi=72, field="cost", period="month", group_by=0)
+            assert os.path.exists(path)
+            assert os.path.getsize(path) > 0
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
     def test_render_no_milestones_table_raises_without_tasks(self):
         cfg = parse_chart({"tasks": [{"name": "Launch", "milestone": True, "date": "2024-06-01"}]})
         fd, path = tempfile.mkstemp(suffix=".png")
@@ -638,7 +878,15 @@ class TestRenderTable:
             pytest.skip("examples/complex.json not found")
         from jsonantt.parser import load_chart
         cfg = load_chart(path)
-        self._render(cfg, ".png")
+        fd, output_path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            render_table(cfg, output_path, dpi=72)
+            assert os.path.exists(output_path)
+            assert os.path.getsize(output_path) > 0
+        finally:
+            if os.path.exists(output_path):
+                os.unlink(output_path)
 
 
 class TestRenderCompare:

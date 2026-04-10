@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import csv
+from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 import json
 import math
 import os
+import re
 import textwrap
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -135,6 +137,21 @@ def _default_table_title(field: str) -> str:
     return titles.get(field, field.replace("_", " ").title())
 
 
+def _coerce_display_factor(value: Any) -> Decimal:
+    """Return a validated numeric display factor for a table column."""
+    if value is None:
+        return Decimal("1")
+    if isinstance(value, bool):
+        raise ValueError("style.table_columns display_factor must be numeric when provided")
+    try:
+        factor = Decimal(str(value))
+    except InvalidOperation as exc:
+        raise ValueError("style.table_columns display_factor must be numeric when provided") from exc
+    if factor.is_nan() or factor.is_infinite():
+        raise ValueError("style.table_columns display_factor must be a finite number")
+    return factor
+
+
 def _resolve_table_columns(style: Style, include_offset: bool = False) -> List[Dict[str, str]]:
     """Return normalized table columns from ``style.table_columns``."""
     raw_columns = style.table_columns or ["task", "name", "description"]
@@ -145,7 +162,14 @@ def _resolve_table_columns(style: Style, include_offset: bool = False) -> List[D
             field = item.strip()
             if not field:
                 raise ValueError("style.table_columns cannot contain blank field names")
-            columns.append({"field": field, "title": _default_table_title(field)})
+            columns.append({
+                "field": field,
+                "title": _default_table_title(field),
+                "rollup": None,
+                "total": False,
+                "total_level": None,
+                "display_factor": Decimal("1"),
+            })
             continue
 
         if isinstance(item, dict):
@@ -153,7 +177,27 @@ def _resolve_table_columns(style: Style, include_offset: bool = False) -> List[D
             if not field:
                 raise ValueError("style.table_columns object entries require a non-empty 'field'")
             title = str(item.get("title", _default_table_title(field)))
-            columns.append({"field": field, "title": title})
+            rollup = item.get("rollup")
+            if rollup is True:
+                rollup = "sum"
+            if rollup not in (None, False, "sum"):
+                raise ValueError("style.table_columns rollup must be 'sum' or true when provided")
+
+            total_level = item.get("total_level")
+            if total_level is not None:
+                if not isinstance(total_level, int) or total_level < 0:
+                    raise ValueError("style.table_columns total_level must be a non-negative integer")
+
+            display_factor = _coerce_display_factor(item.get("display_factor"))
+
+            columns.append({
+                "field": field,
+                "title": title,
+                "rollup": rollup,
+                "total": bool(item.get("total", False)),
+                "total_level": total_level,
+                "display_factor": display_factor,
+            })
             continue
 
         raise ValueError("style.table_columns entries must be strings or objects with 'field'")
@@ -162,8 +206,147 @@ def _resolve_table_columns(style: Style, include_offset: bool = False) -> List[D
         raise ValueError("style.table_columns must contain at least one column")
 
     if include_offset and not any(column["field"] == "offset" for column in columns):
-        columns.append({"field": "offset", "title": "Offset"})
+        columns.append({
+            "field": "offset",
+            "title": "Offset",
+            "rollup": None,
+            "total": False,
+            "total_level": None,
+            "display_factor": Decimal("1"),
+        })
     return columns
+
+
+_NUMERIC_VALUE_RE = re.compile(
+    r"^\s*(?P<prefix>[^\d+\-.]*)?(?P<number>[+\-]?(?:\d+(?:,\d{3})*|\d+)(?:\.\d+)?)\s*(?P<suffix>[^\d]*)\s*$"
+)
+
+
+def _parse_numeric_table_value(value: Any) -> Optional[Dict[str, Any]]:
+    """Parse a numeric or currency-like value for rollup and totals."""
+    if isinstance(value, bool) or value is None:
+        return None
+
+    if isinstance(value, int):
+        return {
+            "amount": Decimal(value),
+            "prefix": "",
+            "suffix": "",
+            "places": 0,
+            "thousands": False,
+        }
+
+    if isinstance(value, float):
+        text = format(value, "f").rstrip("0").rstrip(".")
+        places = len(text.split(".", 1)[1]) if "." in text else 0
+        return {
+            "amount": Decimal(str(value)),
+            "prefix": "",
+            "suffix": "",
+            "places": places,
+            "thousands": False,
+        }
+
+    if isinstance(value, Decimal):
+        normalized = format(value, "f")
+        places = len(normalized.split(".", 1)[1].rstrip("0")) if "." in normalized else 0
+        return {
+            "amount": value,
+            "prefix": "",
+            "suffix": "",
+            "places": places,
+            "thousands": False,
+        }
+
+    if not isinstance(value, str):
+        return None
+
+    match = _NUMERIC_VALUE_RE.match(value)
+    if not match:
+        return None
+
+    number_text = match.group("number")
+    try:
+        amount = Decimal(number_text.replace(",", ""))
+    except InvalidOperation:
+        return None
+
+    places = len(number_text.split(".", 1)[1]) if "." in number_text else 0
+    return {
+        "amount": amount,
+        "prefix": (match.group("prefix") or "").strip(),
+        "suffix": (match.group("suffix") or "").strip(),
+        "places": places,
+        "thousands": "," in number_text,
+    }
+
+
+def _merge_numeric_specs(values: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Merge formatting metadata across multiple numeric-like values."""
+    if not values:
+        return None
+
+    prefix = values[0]["prefix"]
+    suffix = values[0]["suffix"]
+    if any(value["prefix"] != prefix or value["suffix"] != suffix for value in values):
+        return None
+
+    return {
+        "prefix": prefix,
+        "suffix": suffix,
+        "places": max(value["places"] for value in values),
+        "thousands": any(value["thousands"] for value in values),
+    }
+
+
+def _format_numeric_table_value(amount: Decimal, spec: Dict[str, Any]) -> str:
+    """Format an aggregated numeric value using merged metadata."""
+    min_places = int(spec.get("min_places", spec["places"]))
+    max_places = int(spec.get("max_places", spec["places"]))
+    places = max(min_places, max_places)
+    quantizer = Decimal("1") if places == 0 else Decimal("1").scaleb(-places)
+    quantized = amount.quantize(quantizer)
+
+    number_text = f"{quantized:,.{places}f}" if spec["thousands"] else f"{quantized:.{places}f}"
+    if "." in number_text and max_places > min_places:
+        whole, fraction = number_text.split(".", 1)
+        trimmed_fraction = fraction.rstrip("0")
+        if len(trimmed_fraction) < min_places:
+            trimmed_fraction = fraction[:min_places]
+        number_text = whole if not trimmed_fraction else f"{whole}.{trimmed_fraction}"
+
+    sign = "-" if quantized < 0 else ""
+    if sign:
+        number_text = number_text[1:]
+
+    prefix = spec["prefix"]
+    suffix = spec["suffix"]
+    if prefix:
+        prefix += " " if prefix.endswith(":") else ""
+    if suffix:
+        suffix = " " + suffix
+
+    return f"{sign}{prefix}{number_text}{suffix}".strip()
+
+
+def _display_numeric_table_value(numeric_value: Dict[str, Any], column: Dict[str, Any]) -> str:
+    """Format a numeric table value after applying any display conversion."""
+    display_factor = column["display_factor"]
+    base_spec = numeric_value.get("spec", numeric_value)
+    display_spec = _numeric_display_spec(base_spec, display_factor)
+    return _format_numeric_table_value(
+        numeric_value["amount"] * display_factor,
+        display_spec,
+    )
+
+
+def _numeric_display_spec(spec: Dict[str, Any], display_factor: Decimal) -> Dict[str, Any]:
+    """Return a numeric format spec adjusted for a display-time scale factor."""
+    scale_places = max(0, -display_factor.normalize().as_tuple().exponent) if display_factor != 0 else 0
+    display_spec = dict(spec)
+    display_spec["min_places"] = int(display_spec["places"])
+    display_spec["max_places"] = int(display_spec["places"]) + scale_places
+    return display_spec
 
 
 def _table_column_min_width(field: str) -> float:
@@ -216,17 +399,74 @@ def _task_field_value(task: Task, field: str) -> Any:
     return task.fields.get(field)
 
 
-def _row_table_cell(row: _Row, field: str) -> str:
+def _task_rollup_value(task: Task, field: str) -> Optional[Dict[str, Any]]:
+    """Return a recursively summed numeric value for *task* and *field*."""
+    parsed_values: List[Dict[str, Any]] = []
+    total = Decimal("0")
+
+    own_value = _parse_numeric_table_value(_task_field_value(task, field))
+    if own_value is not None:
+        parsed_values.append(own_value)
+        total += own_value["amount"]
+
+    for child in task.children:
+        child_value = _task_rollup_value(child, field)
+        if child_value is None:
+            continue
+        parsed_values.append(child_value["spec"])
+        total += child_value["amount"]
+
+    if not parsed_values:
+        return None
+
+    spec = _merge_numeric_specs(parsed_values)
+    if spec is None:
+        return None
+
+    return {"amount": total, "spec": spec}
+
+
+def _task_table_numeric_value(task: Task, column: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return a numeric table value for *task* and *column* when possible."""
+    if column["rollup"] == "sum":
+        return _task_rollup_value(task, column["field"])
+    return _parse_numeric_table_value(_task_field_value(task, column["field"]))
+
+
+def _compare_table_numeric_value(row: _CompareRow, column: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return a numeric table value for a compare row and column when possible."""
+    if column["field"] in ("task", "name", "description", "offset"):
+        return None
+
+    tasks: List[Task] = []
+    if row.actual is not None:
+        tasks.append(row.actual.task)
+    if row.planned is not None:
+        tasks.append(row.planned.task)
+
+    for task in tasks:
+        numeric_value = _task_table_numeric_value(task, column)
+        if numeric_value is not None:
+            return numeric_value
+    return None
+
+
+def _row_table_cell(row: _Row, column: Dict[str, Any]) -> str:
     """Return the rendered table cell text for *row* and *field*."""
+    field = column["field"]
     if field == "task":
         return _row_table_number(row)
     if field == "name":
         return row.task.name
+    numeric_value = _task_table_numeric_value(row.task, column)
+    if numeric_value is not None:
+        return _display_numeric_table_value(numeric_value, column)
     return _format_table_value(_task_field_value(row.task, field))
 
 
-def _compare_row_table_cell(row: _CompareRow, field: str) -> str:
+def _compare_row_table_cell(row: _CompareRow, column: Dict[str, Any]) -> str:
     """Return the rendered compare-table cell text for *row* and *field*."""
+    field = column["field"]
     if field == "task":
         return _compare_row_table_number(row)
     if field == "name":
@@ -235,6 +475,10 @@ def _compare_row_table_cell(row: _CompareRow, field: str) -> str:
         return row.description
     if field == "offset":
         return _format_compare_offset(row)
+
+    numeric_value = _compare_table_numeric_value(row, column)
+    if numeric_value is not None:
+        return _display_numeric_table_value(numeric_value, column)
 
     candidates: List[Task] = []
     if row.actual is not None:
@@ -250,6 +494,62 @@ def _compare_row_table_cell(row: _CompareRow, field: str) -> str:
         if fallback is None:
             fallback = value
     return _format_table_value(fallback)
+
+
+def _table_footer_label_index(columns: List[Dict[str, Any]]) -> int:
+    """Return the preferred footer label column index."""
+    for preferred in ("name", "description", "task"):
+        for index, column in enumerate(columns):
+            if column["field"] == preferred:
+                return index
+    return 0
+
+
+def _table_total_candidate_rows(rows, column: Dict[str, Any]):
+    """Return the rows that contribute to a column footer total."""
+    level = column["total_level"]
+    if level is not None:
+        return [row for row in rows if row.depth == level]
+    if column["rollup"] == "sum":
+        return [row for row in rows if row.depth == 0]
+    return list(rows)
+
+
+def _build_table_footer_cells(rows, columns: List[Dict[str, Any]], numeric_value_fn) -> Optional[List[str]]:
+    """Build footer cells for configured totals, or return None."""
+    footer_cells = ["" for _ in columns]
+    has_total = False
+
+    for index, column in enumerate(columns):
+        if not column["total"]:
+            continue
+
+        numeric_values: List[Dict[str, Any]] = []
+        total_amount = Decimal("0")
+        for row in _table_total_candidate_rows(rows, column):
+            numeric_value = numeric_value_fn(row, column)
+            if numeric_value is None:
+                continue
+            numeric_values.append(numeric_value["spec"])
+            total_amount += numeric_value["amount"]
+
+        if not numeric_values:
+            continue
+
+        spec = _merge_numeric_specs(numeric_values)
+        if spec is None:
+            continue
+
+        display_factor = column["display_factor"]
+        footer_spec = _numeric_display_spec(spec, display_factor)
+        footer_cells[index] = _format_numeric_table_value(total_amount * display_factor, footer_spec)
+        has_total = True
+
+    if not has_total:
+        return None
+
+    footer_cells[_table_footer_label_index(columns)] = "Total"
+    return footer_cells
 
 
 def _table_cell_font_props(row, field: str, style: Style, font_props: FontProperties, bold_font_props: FontProperties) -> FontProperties:
@@ -312,6 +612,7 @@ def _measure_table_column_widths(
     col_padding_in: float,
     gutter_extra_in: float,
     cell_value_fn,
+    footer_cells: Optional[List[str]] = None,
 ) -> List[float]:
     """Return fitted column widths for a table."""
     font_props = FontProperties(size=style.font_size, weight="normal")
@@ -323,9 +624,12 @@ def _measure_table_column_widths(
         field = column["field"]
         measured_width = _measure_text_width_in(column["title"], bold_font_props)
         for row in rows:
-            cell_text = cell_value_fn(row, field)
+            cell_text = cell_value_fn(row, column)
             cell_font_props = _table_cell_font_props(row, field, style, font_props, bold_font_props)
             measured_width = max(measured_width, _measure_text_width_in(cell_text, cell_font_props))
+
+        if footer_cells is not None:
+            measured_width = max(measured_width, _measure_text_width_in(footer_cells[index], bold_font_props))
 
         width = measured_width + col_padding_in
         min_width = _table_column_min_width(field)
@@ -346,6 +650,7 @@ def _wrap_table_rows(
     style: Style,
     col_padding_in: float,
     cell_value_fn,
+    footer_cells: Optional[List[str]] = None,
 ):
     """Wrap table cell text to fitted widths and return row layout info."""
     font_props = FontProperties(size=style.font_size, weight="normal")
@@ -358,16 +663,473 @@ def _wrap_table_rows(
         line_count = 1
         for column, width_in in zip(columns, widths_in):
             field = column["field"]
-            cell_text = cell_value_fn(row, field)
+            cell_text = cell_value_fn(row, column)
             cell_font_props = _table_cell_font_props(row, field, style, font_props, bold_font_props)
             lines = _wrap_text_measured(cell_text, width_in - col_padding_in, cell_font_props)
             wrapped_cells.append(lines)
             line_count = max(line_count, len(lines))
         row_units = line_count + 0.6
-        wrapped_rows.append((row, wrapped_cells, row_units))
+        wrapped_rows.append((row, wrapped_cells, row_units, False))
+        total_units += row_units
+
+    if footer_cells is not None:
+        wrapped_footer: List[List[str]] = []
+        line_count = 1
+        for cell_text, width_in in zip(footer_cells, widths_in):
+            lines = _wrap_text_measured(cell_text, width_in - col_padding_in, bold_font_props)
+            wrapped_footer.append(lines)
+            line_count = max(line_count, len(lines))
+        row_units = line_count + 0.6
+        wrapped_rows.append((None, wrapped_footer, row_units, True))
         total_units += row_units
 
     return wrapped_rows, total_units
+
+
+def _normalize_burn_period(period: str) -> str:
+    """Return a validated burn reporting period key."""
+    key = str(period).strip().lower()
+    aliases = {
+        "day": "day",
+        "days": "day",
+        "week": "week",
+        "weeks": "week",
+        "month": "month",
+        "months": "month",
+        "quarter": "quarter",
+        "quarters": "quarter",
+        "year": "year",
+        "years": "year",
+    }
+    if key not in aliases:
+        raise ValueError("burn period must be one of day, week, month, quarter, or year")
+    return aliases[key]
+
+
+def _normalize_burn_group_by(group_by: Any) -> Any:
+    """Return a validated burn grouping selector."""
+    if isinstance(group_by, int):
+        if group_by < 0:
+            raise ValueError("burn group depth must be >= 0")
+        return group_by
+
+    key = str(group_by).strip().lower()
+    if key in ("", "0"):
+        return 0
+    if key in ("total", "sum"):
+        return "total"
+    if key in ("leaf", "leaves", "all"):
+        return "leaf"
+    if key.isdigit():
+        return int(key)
+    raise ValueError("burn group must be 'total', 'leaf', or a non-negative integer depth")
+
+
+def _next_period_start(start: date, period: str) -> date:
+    """Return the start of the next reporting period."""
+    key = _normalize_burn_period(period)
+    if key == "day":
+        return start + timedelta(days=1)
+    if key == "week":
+        return start + timedelta(weeks=1)
+    if key == "month":
+        month = start.month + 1
+        year = start.year + (month - 1) // 12
+        month = (month - 1) % 12 + 1
+        return date(year, month, 1)
+    if key == "quarter":
+        month = start.month + 3
+        year = start.year + (month - 1) // 12
+        month = (month - 1) % 12 + 1
+        return date(year, month, 1)
+    return date(start.year + 1, 1, 1)
+
+
+def _format_period_label(start: date, period: str) -> str:
+    """Return the display label for a reporting period."""
+    key = _normalize_burn_period(period)
+    if key == "day":
+        return start.isoformat()
+    if key == "week":
+        return f"Week of {start.isoformat()}"
+    if key == "month":
+        return start.strftime("%Y-%m")
+    if key == "quarter":
+        quarter = ((start.month - 1) // 3) + 1
+        return f"{start.year}-Q{quarter}"
+    return str(start.year)
+
+
+def _task_burn_span(task: Task) -> Optional[Tuple[date, date]]:
+    """Return the half-open burn interval for a task."""
+    start = task.effective_start
+    end = task.effective_end
+
+    if task.milestone:
+        if start is None:
+            return None
+        return start, start + timedelta(days=1)
+
+    if start is None and end is None:
+        return None
+    if start is None:
+        start = end
+    if end is None:
+        end = start + timedelta(days=1)
+    if end <= start:
+        end = start + timedelta(days=1)
+    return start, end
+
+
+def _collect_burn_sources(tasks: List[Task], style: Style, field: str) -> List[Dict[str, Any]]:
+    """Return direct-cost burn sources with hierarchy metadata."""
+    palette = style.colors or ["#4472C4"]
+    palette_index = 0
+    lighten_amount = max(0.0, min(100.0, style.subtask_lightening_pct)) / 100.0
+    sources: List[Dict[str, Any]] = []
+
+    def visit(
+        branch: List[Task],
+        depth: int = 0,
+        parent_color: Optional[str] = None,
+        number_prefix: str = "",
+        ancestors: Tuple[Dict[str, Any], ...] = (),
+    ) -> None:
+        nonlocal palette_index
+
+        for task_idx, task in enumerate(branch):
+            if task.color:
+                color = task.color
+            elif parent_color and depth > 0:
+                color = _lighten(parent_color, lighten_amount)
+            else:
+                color = palette[palette_index % len(palette)]
+                palette_index += 1
+
+            number = number_prefix + str(task_idx + 1)
+            ancestor = {
+                "depth": depth,
+                "name": task.name,
+                "number": number,
+                "color": color,
+            }
+            lineage = ancestors + (ancestor,)
+
+            numeric_value = _parse_numeric_table_value(_task_field_value(task, field))
+            if numeric_value is not None:
+                span = _task_burn_span(task)
+                if span is None:
+                    raise ValueError(f"Task {task.name!r} has numeric field {field!r} but no dates for burn allocation")
+                start, end = span
+                sources.append({
+                    "task": task,
+                    "depth": depth,
+                    "name": task.name,
+                    "number": number,
+                    "color": color,
+                    "amount": numeric_value["amount"],
+                    "spec": numeric_value,
+                    "start": start,
+                    "end": end,
+                    "ancestors": lineage,
+                })
+
+            if task.children:
+                visit(
+                    task.children,
+                    depth=depth + 1,
+                    parent_color=color,
+                    number_prefix=number + ".",
+                    ancestors=lineage,
+                )
+
+    visit(tasks)
+    return sources
+
+
+def _burn_series_for_source(source: Dict[str, Any], group_by: Any) -> Dict[str, Any]:
+    """Return the target series metadata for a burn source."""
+    if group_by == "total":
+        return {
+            "key": "__total__",
+            "number": "",
+            "name": "Total",
+            "depth": -1,
+            "color": source["color"],
+        }
+
+    if group_by == "leaf":
+        ancestor = source["ancestors"][-1]
+    else:
+        ancestor = source["ancestors"][min(int(group_by), len(source["ancestors"]) - 1)]
+
+    return {
+        "key": ancestor["number"],
+        "number": ancestor["number"],
+        "name": ancestor["name"],
+        "depth": ancestor["depth"],
+        "color": ancestor["color"],
+    }
+
+
+def _format_burn_amount(amount: Decimal, spec: Dict[str, Any], display_factor: Decimal) -> str:
+    """Format a burn amount using the shared numeric display rules."""
+    return _format_numeric_table_value(amount * display_factor, _numeric_display_spec(spec, display_factor))
+
+
+def _build_burn_matrix(
+    config: ChartConfig,
+    field: str = "cost",
+    period: str = "month",
+    group_by: Any = 0,
+    display_factor: Any = 1,
+) -> Dict[str, Any]:
+    """Build grouped burn data for charts and matrix tables."""
+    period_key = _normalize_burn_period(period)
+    group_key = _normalize_burn_group_by(group_by)
+    display_factor_decimal = _coerce_display_factor(display_factor)
+    sources = _collect_burn_sources(config.tasks, config.style, field)
+
+    if not sources:
+        raise ValueError(f"No numeric {field!r} values available for burn output")
+
+    spec = _merge_numeric_specs([source["spec"] for source in sources])
+    if spec is None:
+        raise ValueError(f"Cannot mix incompatible numeric formats in burn field {field!r}")
+
+    period_start = config.start if config.start else min(source["start"] for source in sources)
+    period_end = config.end if config.end else max(source["end"] for source in sources)
+    period_start = _snap_to_tick_start(period_start, period_key)
+    period_end = _snap_to_tick_end(period_end, period_key)
+    if period_end <= period_start:
+        period_end = _next_period_start(period_start, period_key)
+
+    periods: List[Dict[str, Any]] = []
+    cursor = period_start
+    while cursor < period_end:
+        next_cursor = _next_period_start(cursor, period_key)
+        periods.append({
+            "start": cursor,
+            "end": next_cursor,
+            "label": _format_period_label(cursor, period_key),
+        })
+        cursor = next_cursor
+
+    series_map: Dict[str, Dict[str, Any]] = {}
+    for source in sources:
+        series_meta = _burn_series_for_source(source, group_key)
+        series = series_map.get(series_meta["key"])
+        if series is None:
+            series = dict(series_meta)
+            series["values"] = [Decimal("0") for _ in periods]
+            series_map[series_meta["key"]] = series
+
+        duration_days = (source["end"] - source["start"]).days
+        if duration_days <= 0:
+            duration_days = 1
+        daily_rate = source["amount"] / Decimal(duration_days)
+
+        for index, bucket in enumerate(periods):
+            overlap_start = max(source["start"], bucket["start"])
+            overlap_end = min(source["end"], bucket["end"])
+            overlap_days = (overlap_end - overlap_start).days
+            if overlap_days > 0:
+                series["values"][index] += daily_rate * Decimal(overlap_days)
+
+    series_list = list(series_map.values())
+    totals = [sum((series["values"][idx] for series in series_list), Decimal("0")) for idx in range(len(periods))]
+    return {
+        "field": field,
+        "period": period_key,
+        "group_by": group_key,
+        "display_factor": display_factor_decimal,
+        "spec": spec,
+        "periods": periods,
+        "series": series_list,
+        "totals": totals,
+        "style": config.style,
+        "title": config.title,
+    }
+
+
+def _burn_series_label(series: Dict[str, Any], style: Style) -> str:
+    """Return the display label for a burn series."""
+    if not series["number"] or not style.number_tasks:
+        return series["name"]
+    number_str = series["number"] + "." if "." not in series["number"] else series["number"]
+    return f"{number_str}  {series['name']}"
+
+
+def _write_burn_table_csv(burn: Dict[str, Any], output_path: str) -> None:
+    """Write burn matrix output to CSV."""
+    headers = ["Task", "Name"] + [period["label"] for period in burn["periods"]]
+    include_footer = not (len(burn["series"]) == 1 and burn["series"][0]["key"] == "__total__")
+
+    with open(output_path, "w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(headers)
+        for series in burn["series"]:
+            writer.writerow(
+                [series["number"] + "." if series["number"] and "." not in series["number"] else series["number"], series["name"]]
+                + [_format_burn_amount(value, burn["spec"], burn["display_factor"]) for value in series["values"]]
+            )
+        if include_footer:
+            writer.writerow(["", "Total"] + [_format_burn_amount(value, burn["spec"], burn["display_factor"]) for value in burn["totals"]])
+
+
+def render_burn_chart(
+    config: ChartConfig,
+    output_path: str,
+    dpi: int = 150,
+    field: str = "cost",
+    period: str = "month",
+    group_by: Any = 0,
+    display_factor: Any = 1,
+) -> None:
+    """Render a funded burn chart from a numeric task field over time buckets."""
+    burn = _build_burn_matrix(config, field=field, period=period, group_by=group_by, display_factor=display_factor)
+    style = config.style
+    period_labels = [bucket["label"] for bucket in burn["periods"]]
+    x_values = list(range(len(period_labels)))
+    fig_w = max(style.width, 4.5 + len(period_labels) * 0.65)
+    fig_h = max(4.8, 3.6 + max(0, len(burn["series"]) - 1) * 0.2)
+
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor=style.background)
+    ax.set_facecolor(style.background)
+
+    bottoms = [0.0 for _ in x_values]
+    if len(burn["series"]) == 1 and burn["series"][0]["key"] == "__total__":
+        series = burn["series"][0]
+        values = [float(value * burn["display_factor"]) for value in series["values"]]
+        ax.bar(x_values, values, color=series["color"], width=0.72, edgecolor="white", linewidth=0.8)
+    else:
+        for series in burn["series"]:
+            values = [float(value * burn["display_factor"]) for value in series["values"]]
+            ax.bar(
+                x_values,
+                values,
+                bottom=bottoms,
+                color=series["color"],
+                width=0.72,
+                edgecolor="white",
+                linewidth=0.7,
+                label=_burn_series_label(series, style),
+            )
+            bottoms = [bottom + value for bottom, value in zip(bottoms, values)]
+
+    ax.set_xticks(x_values)
+    ax.set_xticklabels(period_labels, rotation=35, ha="right", fontsize=max(style.font_size - 1, 8))
+    ax.grid(axis="y", color=style.grid_color, linewidth=1.0, alpha=0.8)
+    ax.set_axisbelow(True)
+    ylabel = f"{_default_table_title(field)} per {burn['period'].title()}"
+    ax.set_ylabel(ylabel, fontsize=style.font_size)
+
+    display_spec = _numeric_display_spec(burn["spec"], burn["display_factor"])
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda value, _: _format_numeric_table_value(Decimal(str(value)), display_spec)))
+
+    title = config.title.strip() if config.title else _default_table_title(field)
+    ax.set_title(f"{title} Burn by {burn['period'].title()}", fontsize=style.font_size + 2, fontweight="bold")
+
+    if len(burn["series"]) > 1:
+        ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False, fontsize=max(style.font_size - 1, 8))
+        fig.subplots_adjust(right=0.80)
+    else:
+        fig.subplots_adjust(right=0.96)
+
+    fig.subplots_adjust(left=0.10, bottom=0.22, top=0.88)
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor=style.background)
+    plt.close(fig)
+
+
+def render_burn_table(
+    config: ChartConfig,
+    output_path: str,
+    dpi: int = 150,
+    field: str = "cost",
+    period: str = "month",
+    group_by: Any = 0,
+    display_factor: Any = 1,
+) -> None:
+    """Render a burn matrix table with period columns and grouped task rows."""
+    burn = _build_burn_matrix(config, field=field, period=period, group_by=group_by, display_factor=display_factor)
+    if os.path.splitext(output_path)[1].lower() == ".csv":
+        _write_burn_table_csv(burn, output_path)
+        return
+
+    headers = ["Task", "Name"] + [bucket["label"] for bucket in burn["periods"]]
+    rows: List[Tuple[List[str], bool, Optional[str]]] = []
+    for series in burn["series"]:
+        number = series["number"] + "." if series["number"] and "." not in series["number"] else series["number"]
+        row_cells = [number, series["name"]] + [
+            _format_burn_amount(value, burn["spec"], burn["display_factor"]) for value in series["values"]
+        ]
+        rows.append((row_cells, False, series["color"]))
+
+    include_footer = not (len(burn["series"]) == 1 and burn["series"][0]["key"] == "__total__")
+    if include_footer:
+        footer_cells = ["", "Total"] + [
+            _format_burn_amount(value, burn["spec"], burn["display_factor"]) for value in burn["totals"]
+        ]
+        rows.append((footer_cells, True, None))
+
+    style = config.style
+    fig_w = max(style.width, 3.8 + len(headers) * 1.1)
+    fig_h = max(2.4, 1.0 + 0.45 * (len(rows) + 1))
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor=style.background)
+    ax.axis("off")
+
+    task_width = 0.08
+    name_width = 0.24
+    remaining_width = max(0.20, 1.0 - task_width - name_width)
+    period_width = remaining_width / max(1, len(headers) - 2)
+    col_widths = [task_width, name_width] + [period_width for _ in headers[2:]]
+
+    table = ax.table(
+        cellText=[row_cells for row_cells, _, _ in rows],
+        colLabels=headers,
+        colLoc="left",
+        cellLoc="left",
+        colWidths=col_widths,
+        bbox=[0.0, 0.0, 1.0, 0.92],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(style.font_size)
+    table.scale(1.0, 1.5)
+
+    header_color = _darken(style.row_band_color, 0.08)
+    for (row_index, col_index), cell in table.get_celld().items():
+        cell.set_edgecolor(style.grid_color)
+        cell.set_linewidth(0.8)
+        if row_index == 0:
+            cell.set_facecolor(header_color)
+            cell.set_text_props(weight="bold", color="#111111")
+            continue
+
+        row_cells, is_footer, accent = rows[row_index - 1]
+        if is_footer:
+            cell.set_facecolor(header_color)
+            cell.set_text_props(weight="bold", color="#111111")
+        else:
+            band_color = style.background if (row_index - 1) % 2 == 0 else style.row_band_color
+            cell.set_facecolor(band_color)
+            if col_index in (0, 1):
+                cell.set_text_props(weight="bold" if rows[row_index - 1][0][0] and col_index == 1 and rows[row_index - 1][0][0].count(".") <= 1 else "normal")
+            if accent is not None and col_index == 0:
+                cell.set_facecolor(_lighten(accent, 0.78))
+
+    if config.title:
+        fig.suptitle(
+            f"{config.title} Burn Matrix",
+            fontsize=style.font_size + 3,
+            fontweight="bold",
+            x=0.5,
+            y=0.98,
+            ha="center",
+            va="top",
+        )
+
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor=style.background)
+    plt.close(fig)
 
 
 # ---------------------------------------------------------------------------
@@ -518,6 +1280,7 @@ def render_table(
     has_table_gutter = style.table_colorize
     gutter_width_in = table_width_in * gutter_width_frac if has_table_gutter else 0.0
     columns = _resolve_table_columns(style)
+    footer_cells = _build_table_footer_cells(rows, columns, lambda row, column: _task_table_numeric_value(row.task, column))
     widths_in = _measure_table_column_widths(
         rows,
         columns,
@@ -526,6 +1289,7 @@ def render_table(
         col_padding_in,
         (gutter_width_in + gutter_gap_in) if has_table_gutter else 0.0,
         _row_table_cell,
+        footer_cells=footer_cells,
     )
     fractions = [width_in / table_width_in for width_in in widths_in]
     wrapped_rows, total_units = _wrap_table_rows(
@@ -535,6 +1299,7 @@ def render_table(
         style,
         col_padding_in,
         _row_table_cell,
+        footer_cells=footer_cells,
     )
 
     fig_h = total_units * line_height_in + (0.8 if config.title else 0.35)
@@ -574,8 +1339,9 @@ def render_table(
         x += fraction
 
     y = 1.3
-    for row_index, (row, wrapped_cells, row_units) in enumerate(wrapped_rows):
-        band_color = style.background if row_index % 2 == 0 else style.row_band_color
+    visible_row_index = 0
+    for row, wrapped_cells, row_units, is_footer in wrapped_rows:
+        band_color = header_color if is_footer else (style.background if visible_row_index % 2 == 0 else style.row_band_color)
 
         ax.add_patch(mpatches.Rectangle(
             (0, y), 1.0, row_units,
@@ -583,8 +1349,10 @@ def render_table(
             edgecolor=divider_color,
             linewidth=0.8,
         ))
-        show_milestone_marker = row.task.milestone and style.table_colorize and style.table_show_markers
-        if style.table_colorize and not show_milestone_marker:
+        show_milestone_marker = bool(
+            not is_footer and row is not None and row.task.milestone and style.table_colorize and style.table_show_markers
+        )
+        if not is_footer and style.table_colorize and not show_milestone_marker:
             ax.add_patch(mpatches.Rectangle(
                 (0, y), 0.010, row_units,
                 facecolor=row.color,
@@ -609,10 +1377,10 @@ def render_table(
             ax.plot([boundary, boundary], [y, y + row_units], color=divider_color, linewidth=1.0)
 
         text_y = y + row_units / 2.0
-        task_weight = "bold" if (row.task.bold or (style.bold_tasks and row.depth == 0)) else "normal"
+        task_weight = "bold" if is_footer or (row is not None and (row.task.bold or (style.bold_tasks and row.depth == 0))) else "normal"
         for column_index, (column, x_start, fraction, lines) in enumerate(zip(columns, x_starts, fractions, wrapped_cells)):
             clip = mpatches.Rectangle((x_start, y), fraction, row_units, transform=ax.transData)
-            fontweight = task_weight if column["field"] in ("task", "name") else "normal"
+            fontweight = task_weight if column["field"] in ("task", "name") else ("bold" if is_footer else "normal")
             text_x = max(x_start + text_pad_frac, gutter_width + 0.006) if column_index == 0 else x_start + text_pad_frac
             cell_text = ax.text(
                 text_x,
@@ -628,6 +1396,8 @@ def render_table(
             )
             cell_text.set_clip_path(clip)
 
+        if not is_footer:
+            visible_row_index += 1
         y += row_units
 
     fig.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor=style.background)
@@ -766,6 +1536,7 @@ def render_compare_table(
     has_table_gutter = style.table_colorize
     gutter_width_in = table_width_in * gutter_width_frac if has_table_gutter else 0.0
     columns = _resolve_table_columns(style, include_offset=True)
+    footer_cells = _build_table_footer_cells(rows, columns, _compare_table_numeric_value)
     widths_in = _measure_table_column_widths(
         rows,
         columns,
@@ -774,6 +1545,7 @@ def render_compare_table(
         col_padding_in,
         (gutter_width_in + gutter_gap_in) if has_table_gutter else 0.0,
         _compare_row_table_cell,
+        footer_cells=footer_cells,
     )
     fractions = [width_in / table_width_in for width_in in widths_in]
     wrapped_rows, total_units = _wrap_table_rows(
@@ -783,6 +1555,7 @@ def render_compare_table(
         style,
         col_padding_in,
         _compare_row_table_cell,
+        footer_cells=footer_cells,
     )
 
     title = _compare_title(planned_config, actual_config)
@@ -818,13 +1591,16 @@ def render_compare_table(
         x += fraction
 
     y = 1.3
-    for row_index, (row, wrapped_cells, row_units) in enumerate(wrapped_rows):
-        band_color = style.background if row_index % 2 == 0 else style.row_band_color
+    visible_row_index = 0
+    for row, wrapped_cells, row_units, is_footer in wrapped_rows:
+        band_color = header_color if is_footer else (style.background if visible_row_index % 2 == 0 else style.row_band_color)
         ax.add_patch(mpatches.Rectangle((0, y), 1.0, row_units, facecolor=band_color, edgecolor=divider_color, linewidth=0.8))
 
-        show_milestone_marker = row.task.milestone and style.table_colorize and style.table_show_markers
-        accent_color = row.actual.color if row.actual is not None else row.planned.color
-        if style.table_colorize and not show_milestone_marker:
+        show_milestone_marker = bool(
+            not is_footer and row is not None and row.task.milestone and style.table_colorize and style.table_show_markers
+        )
+        accent_color = row.actual.color if row is not None and row.actual is not None else row.planned.color if row is not None and row.planned is not None else "none"
+        if not is_footer and style.table_colorize and not show_milestone_marker:
             ax.add_patch(mpatches.Rectangle((0, y), 0.010, row_units, facecolor=accent_color, edgecolor="none"))
         if show_milestone_marker:
             marker_x = gutter_width / 2.0
@@ -844,10 +1620,10 @@ def render_compare_table(
             ax.plot([boundary, boundary], [y, y + row_units], color=divider_color, linewidth=1.0)
 
         text_y = y + row_units / 2.0
-        task_weight = "bold" if (row.task.bold or (style.bold_tasks and row.depth == 0)) else "normal"
+        task_weight = "bold" if is_footer or (row is not None and (row.task.bold or (style.bold_tasks and row.depth == 0))) else "normal"
         for column_index, (column, x_start, fraction, lines) in enumerate(zip(columns, x_starts, fractions, wrapped_cells)):
             clip = mpatches.Rectangle((x_start, y), fraction, row_units, transform=ax.transData)
-            fontweight = task_weight if column["field"] in ("task", "name") else "normal"
+            fontweight = task_weight if column["field"] in ("task", "name") else ("bold" if is_footer else "normal")
             text_x = max(x_start + text_pad_frac, gutter_width + 0.006) if column_index == 0 else x_start + text_pad_frac
             cell_text = ax.text(
                 text_x,
@@ -863,7 +1639,7 @@ def render_compare_table(
             )
             cell_text.set_clip_path(clip)
 
-        if row.is_removed:
+        if not is_footer and row is not None and row.is_removed:
             strike_font_props = FontProperties(size=style.font_size, weight=task_weight)
             for column_index, (column, x_start, lines) in enumerate(zip(columns, x_starts, wrapped_cells)):
                 if column["field"] == "offset":
@@ -871,6 +1647,8 @@ def render_compare_table(
                 strike_x = max(x_start + text_pad_frac, gutter_width + 0.006) if column_index == 0 else x_start + text_pad_frac
                 _draw_strike_line(ax, strike_x, text_y, " ".join(lines), strike_font_props)
 
+        if not is_footer:
+            visible_row_index += 1
         y += row_units
 
     fig.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor=style.background)
@@ -1083,11 +1861,14 @@ def _filter_compare_rows_for_table(
 def _write_compare_table_csv(rows: List[_CompareRow], output_path: str, style: Style) -> None:
     """Write compare table rows to *output_path* as CSV."""
     columns = _resolve_table_columns(style, include_offset=True)
+    footer_cells = _build_table_footer_cells(rows, columns, _compare_table_numeric_value)
     with open(output_path, "w", encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh)
         writer.writerow([column["title"] for column in columns])
         for row in rows:
-            writer.writerow([_compare_row_table_cell(row, column["field"]) for column in columns])
+            writer.writerow([_compare_row_table_cell(row, column) for column in columns])
+        if footer_cells is not None:
+            writer.writerow(footer_cells)
 
 
 def _compare_key(row: _Row) -> str:
@@ -1133,11 +1914,14 @@ def _merge_compare_rows(planned_rows: List[_Row], actual_rows: List[_Row]) -> Li
 def _write_table_csv(rows: List[_Row], output_path: str, style: Style) -> None:
     """Write table rows to *output_path* as CSV."""
     columns = _resolve_table_columns(style)
+    footer_cells = _build_table_footer_cells(rows, columns, lambda row, column: _task_table_numeric_value(row.task, column))
     with open(output_path, "w", encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh)
         writer.writerow([column["title"] for column in columns])
         for row in rows:
-            writer.writerow([_row_table_cell(row, column["field"]) for column in columns])
+            writer.writerow([_row_table_cell(row, column) for column in columns])
+        if footer_cells is not None:
+            writer.writerow(footer_cells)
 
 
 # ---------------------------------------------------------------------------
