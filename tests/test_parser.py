@@ -214,6 +214,31 @@ class TestParseChart:
         cfg = parse_chart(data)
         assert cfg.tasks[0].marker == "*"
 
+    def test_not_before_resolves_idless_child_milestone(self):
+        data = {
+            "tasks": [
+                {
+                    "name": "Parent",
+                    "id": "prom0",
+                    "start": "2024-01-01",
+                    "end": "2024-01-10",
+                    "children": [
+                        {
+                            "name": "Child milestone",
+                            "milestone": True,
+                            "not_before": "prom0",
+                        }
+                    ],
+                }
+            ]
+        }
+
+        cfg = parse_chart(data)
+        milestone = cfg.tasks[0].children[0]
+
+        assert milestone.start == date(2024, 1, 10)
+        assert milestone.milestone_date == date(2024, 1, 10)
+
 
     def test_shorthand_string_task(self):
         data = {"tasks": ["Quick task"]}

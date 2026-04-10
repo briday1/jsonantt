@@ -36,9 +36,10 @@ def parse_chart(data: Dict[str, Any]) -> ChartConfig:
     ]
 
     # Resolve not_before references now that all tasks are parsed
-    all_tasks: Dict[str, Task] = {}
-    _collect_by_id(tasks, all_tasks)
-    _resolve_not_before(all_tasks)
+    all_tasks: List[Task] = []
+    all_tasks_by_id: Dict[str, Task] = {}
+    _collect_tasks(tasks, all_tasks, all_tasks_by_id)
+    _resolve_not_before(all_tasks, all_tasks_by_id)
 
     arrows = [
         Arrow(
@@ -232,23 +233,28 @@ def _add_years(d: date, years: int) -> date:
 # not_before resolution helpers
 # ---------------------------------------------------------------------------
 
-def _collect_by_id(tasks: List[Task], mapping: Dict[str, Task]) -> None:
-    """Recursively build a flat ``id -> Task`` mapping."""
+def _collect_tasks(
+    tasks: List[Task],
+    collected: List[Task],
+    mapping: Dict[str, Task],
+) -> None:
+    """Recursively collect all tasks and build an ``id -> Task`` mapping."""
     for task in tasks:
+        collected.append(task)
         if task.id is not None:
             mapping[task.id] = task
-        _collect_by_id(task.children, mapping)
+        _collect_tasks(task.children, collected, mapping)
 
 
-def _resolve_not_before(all_tasks: Dict[str, Task]) -> None:
+def _resolve_not_before(all_tasks: List[Task], all_tasks_by_id: Dict[str, Task]) -> None:
     """Resolve ``not_before`` references, filling in ``start`` (and ``end``)."""
     max_passes = len(all_tasks) + 1
     for _ in range(max_passes):
         changed = False
-        for task in all_tasks.values():
+        for task in all_tasks:
             if task.not_before is None or task.start is not None:
                 continue
-            ref = all_tasks.get(task.not_before)
+            ref = all_tasks_by_id.get(task.not_before)
             if ref is None:
                 raise ValueError(
                     f"not_before references unknown id: {task.not_before!r}"
@@ -267,7 +273,7 @@ def _resolve_not_before(all_tasks: Dict[str, Task]) -> None:
             break
 
     # Surface any remaining unresolved tasks (circular references etc.)
-    for task in all_tasks.values():
+    for task in all_tasks:
         if task.not_before is not None and task.start is None:
             raise ValueError(
                 f"Could not resolve not_before={task.not_before!r} "
