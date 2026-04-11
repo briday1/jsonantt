@@ -38,10 +38,6 @@ Top-level fields
      - object
      - see :doc:`style-guide`
      - Visual style overrides. See :doc:`style-guide` for all fields.
-   * - ``arrows``
-     - array
-     - ``[]``
-     - List of :ref:`arrow objects <arrow-object>` drawn as dependency lines.
 
 .. _task-object:
 
@@ -69,7 +65,7 @@ Each entry in ``tasks`` (and each entry in a task's ``children`` array) is a tas
    * - ``id``
      - string
      - —
-     - Unique identifier used in ``not_before`` references and ``arrows``.
+     - Unique identifier used in ``not_before`` references.
    * - ``start``
      - string
      - —
@@ -251,38 +247,6 @@ jsonantt resolves each task's start and end using the first applicable rule:
 3. **Chain** ``not_before`` + ``duration`` — ``start`` is set to the effective end of the referenced task; ``end`` is then computed.
 4. **Parent** — a task with no dates and no ``not_before``/``duration`` derives its range from its ``children``.
 
-.. _arrow-object:
-
-Arrow object
-------------
-
-Arrows draw dependency lines between tasks in chart mode.
-
-.. list-table::
-   :widths: 20 15 15 50
-   :header-rows: 1
-
-   * - Field
-     - Type
-     - Default
-     - Description
-   * - ``from``
-     - string
-     - **required**
-     - ``id`` of the source task.
-   * - ``to``
-     - string
-     - **required**
-     - ``id`` of the destination task.
-   * - ``color``
-     - string
-     - ``"#888888"``
-     - Hex color for the arrow line.
-   * - ``label``
-     - string
-     - —
-     - Optional text label drawn alongside the arrow.
-
 Minimal example
 ---------------
 
@@ -341,8 +305,6 @@ Full skeleton
            }
          ]
        }
-     ],
-     "arrows": [
-       { "from": "task-a", "to": "task-b", "color": "#666666" }
+
      ]
    }
