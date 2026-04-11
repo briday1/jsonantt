@@ -46,6 +46,10 @@ Then run:
 
 Open ``chart.png`` — you have a Gantt chart.
 
+.. image:: _static/img/quickstart.png
+   :alt: Your first chart
+   :width: 100%
+
 Adding tick marks and style
 ---------------------------
 
@@ -93,6 +97,10 @@ Duration units:
    * - ``y``
      - Calendar years
 
+.. image:: _static/img/durations.png
+   :alt: Duration scheduling example
+   :width: 100%
+
 Chaining tasks with ``not_before``
 ------------------------------------
 
@@ -109,6 +117,10 @@ Give tasks an ``id`` and use ``not_before`` to automatically start a task after 
    }
 
 ``not_before`` also works with parent-task IDs — it will start after the latest child end.
+
+.. image:: _static/img/example-dependencies.png
+   :alt: not_before chaining example
+   :width: 100%
 
 Render a task table
 -------------------

@@ -1,14 +1,14 @@
 Examples
 ========
 
-The ``examples/`` directory in the repository contains three ready-to-run examples.
+The ``examples/`` directory in the repository contains three ready-to-run examples,
+and ``docs/examples/`` contains the smaller fixtures used in this manual.
 Each is self-contained — copy, edit, and run with ``jsonantt``.
 
 .. code-block:: bash
 
-   # Run any example
-   jsonantt examples/simple.json     /tmp/simple.png
-   jsonantt examples/complex.json    /tmp/complex.png
+   jsonantt examples/simple.json       /tmp/simple.png
+   jsonantt examples/complex.json      /tmp/complex.png
    jsonantt examples/dependencies.json /tmp/deps.png
 
 ----
@@ -18,6 +18,37 @@ simple.json — three-year project plan
 
 **What it shows:** a clean multi-phase project with nested milestones, year/quarter ticks,
 and the default color palette.
+
+Key fields used
+~~~~~~~~~~~~~~~
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Field
+     - Role in this example
+   * - ``title``
+     - Chart heading
+   * - ``dateformat``
+     - ``"%Y-%m-%d"`` — ISO dates throughout
+   * - ``style.major_tick``
+     - ``"year"`` — bold annual gridlines with labels
+   * - ``style.minor_tick``
+     - ``"quarter"`` — lighter quarterly gridlines
+   * - ``task.children``
+     - Phase tasks have no dates; span derives from children
+   * - ``task.start`` / ``task.end``
+     - Leaf tasks use explicit date ranges
+   * - ``task.milestone``
+     - ``true`` — renders a diamond marker instead of a bar
+   * - ``task.date``
+     - The exact date the milestone falls on
+   * - ``task.color``
+     - ``"#FFD700"`` — gold override on each milestone
+
+JSON
+~~~~
 
 .. code-block:: json
 
@@ -34,7 +65,8 @@ and the default color palette.
          "children": [
            { "name": "Requirements gathering", "start": "2024-01-08", "end": "2024-02-16" },
            { "name": "Architecture design",    "start": "2024-02-05", "end": "2024-03-28" },
-           { "name": "Planning complete", "milestone": true, "date": "2024-04-01", "color": "#FFD700" }
+           { "name": "Planning complete", "milestone": true, "date": "2024-04-01",
+             "color": "#FFD700" }
          ]
        },
        {
@@ -43,17 +75,19 @@ and the default color palette.
            { "name": "Backend API",  "start": "2024-04-01", "end": "2024-07-26" },
            { "name": "Frontend",     "start": "2024-05-06", "end": "2024-08-30" },
            { "name": "Integration",  "start": "2024-08-12", "end": "2024-10-25" },
-           { "name": "Dev complete", "milestone": true, "date": "2024-11-01", "color": "#FFD700" }
+           { "name": "Dev complete", "milestone": true, "date": "2024-11-01",
+             "color": "#FFD700" }
          ]
        }
      ]
    }
 
-Key things to notice:
+Output
+~~~~~~
 
-* Top-level phase tasks have **no dates** — their span is derived from their children.
-* Milestones use ``"milestone": true`` with a ``"date"`` field and a custom ``"color"``.
-* ``major_tick: "year"`` + ``minor_tick: "quarter"`` draws prominent year lines with lighter quarter marks.
+.. image:: _static/img/example-simple.png
+   :alt: simple.json rendered output
+   :width: 100%
 
 ----
 
@@ -61,7 +95,40 @@ complex.json — five-year engineering roadmap
 ---------------------------------------------
 
 **What it shows:** three levels of nesting, ``subtask_lightening_pct`` for color inheritance,
-``tick_position: "both"`` to label ticks on both axes, and no title for a tighter layout.
+``tick_position: "both"`` to label ticks on both axes, and no ``title`` for a tighter layout.
+
+Key fields used
+~~~~~~~~~~~~~~~
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Field
+     - Role in this example
+   * - ``title`` *(omitted)*
+     - Removing the title eliminates dead whitespace at the top
+   * - ``style.row_height``
+     - ``0.3`` — compact rows for a tall chart
+   * - ``style.font_size``
+     - ``12`` — slightly larger than the default for a presentation-ready chart
+   * - ``style.indent_size``
+     - ``3`` — spaces added per depth level in the label column
+   * - ``style.subtask_lightening_pct``
+     - ``25`` — each nesting level inherits the parent color, lightened 25%
+   * - ``style.major_tick`` / ``style.minor_tick``
+     - ``"year"`` / ``"quarter"``
+   * - ``style.tick_position``
+     - ``"both"`` — tick labels appear at top **and** bottom (useful for tall charts)
+   * - ``task.color``
+     - Set on each top-level phase; children inherit and auto-lighten
+   * - ``task.description``
+     - Stored on each task; available in table output via ``table_columns``
+   * - Three nesting levels
+     - Phase → Group → Leaf; summary bars auto-span all descendants
+
+JSON (abbreviated — see ``examples/complex.json`` for the full file)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: json
 
@@ -85,8 +152,7 @@ complex.json — five-year engineering roadmap
              "name": "Infrastructure",
              "children": [
                { "name": "Cloud provisioning", "start": "2024-01-08", "end": "2024-02-16" },
-               { "name": "CI/CD pipeline",     "start": "2024-02-05", "end": "2024-03-15" },
-               { "name": "Observability",       "start": "2024-03-01", "end": "2024-04-12" }
+               { "name": "CI/CD pipeline",     "start": "2024-02-05", "end": "2024-03-15" }
              ]
            },
            {
@@ -98,18 +164,45 @@ complex.json — five-year engineering roadmap
      ]
    }
 
-Key things to notice:
+Output
+~~~~~~
 
-* Omitting ``"title"`` removes the title row without leaving dead whitespace.
-* ``subtask_lightening_pct: 25`` automatically lightens each phase's color for child tasks — no manual color per task needed.
-* ``tick_position: "both"`` labels the x-axis at top *and* bottom, useful for tall charts.
+.. image:: _static/img/example-complex.png
+   :alt: complex.json rendered output
+   :width: 100%
 
 ----
 
 dependencies.json — chained scheduling with ``not_before``
 -----------------------------------------------------------
 
-**What it shows:** how to build a dependency chain without writing a single end date.
+**What it shows:** an entire schedule built from a single hard start date and duration
+chains — no end dates written by hand.
+
+Key fields used
+~~~~~~~~~~~~~~~
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Field
+     - Role in this example
+   * - ``task.id``
+     - Unique identifier for each task so others can reference it
+   * - ``task.start``
+     - Only the first task needs a hard start date
+   * - ``task.duration``
+     - All tasks use durations (``"3m"``, ``"6m"``, ``"6w"``, …) instead of end dates
+   * - ``task.not_before``
+     - Links a task's start to another task's effective end — cascades automatically
+   * - ``style.width``
+     - ``16`` inches — wider figure for a schedule that spans ~18 months
+   * - ``style.major_tick`` / ``style.minor_tick``
+     - ``"year"`` / ``"quarter"``
+
+JSON
+~~~~
 
 .. code-block:: json
 
@@ -123,29 +216,34 @@ dependencies.json — chained scheduling with ``not_before``
      },
      "tasks": [
        {
-         "id": "design",
-         "name": "Design",
-         "start": "2024-01-06",
-         "duration": "3m",
-         "color": "#4472C4",
+         "id": "design",   "name": "Design",
+         "start": "2024-01-06", "duration": "3m", "color": "#4472C4",
          "children": [
-           { "id": "wireframes", "name": "Wireframes", "start": "2024-01-06", "duration": "6w" },
-           { "id": "mockups",    "name": "Mockups",    "not_before": "wireframes", "duration": "6w" }
+           { "id": "wireframes", "name": "Wireframes",
+             "start": "2024-01-06", "duration": "6w" },
+           { "id": "mockups",    "name": "Mockups",
+             "not_before": "wireframes", "duration": "6w" }
          ]
        },
-       { "id": "backend",  "name": "Backend development", "not_before": "design",   "duration": "6m", "color": "#70AD47" },
-       { "id": "frontend", "name": "Frontend development", "not_before": "design",   "duration": "5m", "color": "#ED7D31" },
-       { "id": "qa",       "name": "QA & testing",         "not_before": "backend",  "duration": "3m", "color": "#FF5757" },
-       { "id": "rollout",  "name": "Staged rollout",        "not_before": "qa",       "duration": "4m", "color": "#9DC3E6" }
+       { "id": "backend",  "name": "Backend development",
+         "not_before": "design",  "duration": "6m", "color": "#70AD47" },
+       { "id": "frontend", "name": "Frontend development",
+         "not_before": "design",  "duration": "5m", "color": "#ED7D31" },
+       { "id": "qa",       "name": "QA & testing",
+         "not_before": "backend", "duration": "3m", "color": "#FF5757" },
+       { "id": "rollout",  "name": "Staged rollout",
+         "not_before": "qa",      "duration": "4m", "color": "#9DC3E6" }
      ]
    }
 
-Key things to notice:
+Output
+~~~~~~
 
-* Every task has an ``"id"`` so it can be referenced.
-* ``"not_before": "design"`` means *backend* and *frontend* both start the day *design* ends.
-* ``"not_before"`` on a parent task resolves against the parent's **effective end** (the latest child end), so the whole ``design`` group — including ``mockups`` — must finish before ``backend`` starts.
-* Only the first task needs a hard ``"start"``; everything else cascades automatically.
+.. image:: _static/img/example-dependencies.png
+   :alt: dependencies.json rendered output
+   :width: 100%
+
+----
 
 Recipes
 -------
@@ -164,8 +262,8 @@ Render at higher resolution for print
 
    jsonantt project.json chart.pdf --dpi 300
 
-Show only the top two levels of a deep hierarchy
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Show only the top two nesting levels
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -194,3 +292,4 @@ Add a ``"cost"`` field to each task (e.g. ``"cost": 50000``), then:
 
    jsonantt project.json burn.png \
      --burn --burn-field cost --burn-period month --burn-group 0
+

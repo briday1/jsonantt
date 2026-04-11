@@ -98,6 +98,78 @@ Each entry in ``tasks`` (and each entry in a task's ``children`` array) is a tas
      - string
      - —
      - The milestone date. Used only when ``milestone: true``.
+
+Milestone field summary
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :widths: 22 15 13 50
+   :header-rows: 1
+
+   * - Field
+     - Type
+     - Default
+     - Description
+   * - ``milestone``
+     - boolean
+     - ``false``
+     - Render as a marker instead of a bar
+   * - ``date``
+     - string
+     - —
+     - Point-in-time date for the milestone
+   * - ``color``
+     - string
+     - style default
+     - Marker fill color (e.g. ``"#FFD700"``)
+   * - ``marker``
+     - string
+     - ``"D"``
+     - Matplotlib marker: ``"D"`` diamond, ``"*"`` star, ``"^"`` triangle
+   * - ``marker_size``
+     - number
+     - ``14.0``
+     - Override marker size in points
+
+Example: milestones with different markers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: json
+
+   {
+     "title": "Milestone Markers",
+     "dateformat": "%Y-%m-%d",
+     "style": { "major_tick": "quarter", "minor_tick": "month" },
+     "tasks": [{
+       "name": "Project Alpha",
+       "children": [
+         { "name": "Discovery",   "start": "2025-01-06", "end": "2025-02-07" },
+         { "name": "Design done", "milestone": true, "date": "2025-04-01",
+           "color": "#FFD700" },
+         { "name": "Development", "start": "2025-04-01", "end": "2025-07-18" },
+         { "name": "Beta launch", "milestone": true, "date": "2025-07-21",
+           "color": "#FF6B6B", "marker": "*", "marker_size": 16 },
+         { "name": "GA release",  "milestone": true, "date": "2025-09-15",
+           "color": "#70AD47" }
+       ]
+     }]
+   }
+
+.. image:: _static/img/milestones.png
+   :alt: Milestone markers example
+   :width: 100%
+
+Other task fields
+~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :widths: 22 15 13 50
+   :header-rows: 1
+
+   * - Field
+     - Type
+     - Default
+     - Description
    * - ``bold``
      - boolean
      - ``false``
@@ -144,6 +216,30 @@ Duration units
      - Calendar years. ``"1y"`` from Jan 1 2024 ends Jan 1 2025.
 
 Examples: ``"90d"``, ``"3m"``, ``"2w"``, ``"1y"``, ``"18m"``.
+
+Duration and chaining example
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: json
+
+   {
+     "title": "Duration & not_before Scheduling",
+     "dateformat": "%Y-%m-%d",
+     "tasks": [
+       { "id": "design",   "name": "Design",
+         "start": "2025-01-06", "duration": "2m", "color": "#4472C4" },
+       { "id": "backend",  "name": "Backend",
+         "not_before": "design", "duration": "3m", "color": "#70AD47" },
+       { "id": "frontend", "name": "Frontend",
+         "not_before": "design", "duration": "2m", "color": "#ED7D31" },
+       { "id": "qa",       "name": "QA & Testing",
+         "not_before": "backend", "duration": "6w", "color": "#FF5757" }
+     ]
+   }
+
+.. image:: _static/img/durations.png
+   :alt: Duration and not_before chaining
+   :width: 100%
 
 Date resolution order
 ~~~~~~~~~~~~~~~~~~~~~

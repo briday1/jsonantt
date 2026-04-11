@@ -1,0 +1,24 @@
+{
+  "title": "My First Project",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "major_tick": "year",
+    "minor_tick": "quarter"
+  },
+  "tasks": [
+    {
+      "name": "Phase 1",
+      "children": [
+        { "name": "Research", "start": "2024-01-08", "end": "2024-02-09" },
+        { "name": "Design",   "start": "2024-02-12", "end": "2024-03-22" }
+      ]
+    },
+    {
+      "name": "Phase 2",
+      "children": [
+        { "name": "Build", "start": "2024-03-25", "end": "2024-06-28" },
+        { "name": "Ship",  "milestone": true, "date": "2024-07-01", "color": "#FFD700" }
+      ]
+    }
+  ]
+}

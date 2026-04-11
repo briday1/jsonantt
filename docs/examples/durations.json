@@ -1,0 +1,45 @@
+{
+  "title": "Duration & not_before Scheduling",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "major_tick": "quarter",
+    "minor_tick": "month"
+  },
+  "tasks": [
+    {
+      "id": "design",
+      "name": "Design",
+      "start": "2025-01-06",
+      "duration": "2m",
+      "color": "#4472C4"
+    },
+    {
+      "id": "backend",
+      "name": "Backend",
+      "not_before": "design",
+      "duration": "3m",
+      "color": "#70AD47"
+    },
+    {
+      "id": "frontend",
+      "name": "Frontend",
+      "not_before": "design",
+      "duration": "2m",
+      "color": "#ED7D31"
+    },
+    {
+      "id": "qa",
+      "name": "QA & Testing",
+      "not_before": "backend",
+      "duration": "6w",
+      "color": "#FF5757"
+    },
+    {
+      "id": "rollout",
+      "name": "Staged rollout",
+      "not_before": "qa",
+      "duration": "3w",
+      "color": "#9DC3E6"
+    }
+  ]
+}

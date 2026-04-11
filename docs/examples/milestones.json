@@ -1,0 +1,25 @@
+{
+  "title": "Milestone Markers",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "major_tick": "quarter",
+    "minor_tick": "month"
+  },
+  "tasks": [
+    {
+      "name": "Project Alpha",
+      "children": [
+        { "name": "Discovery",   "start": "2025-01-06", "end": "2025-02-07" },
+        { "name": "Design",      "start": "2025-02-10", "end": "2025-03-28" },
+        { "name": "Design done", "milestone": true, "date": "2025-04-01",
+          "color": "#FFD700" },
+        { "name": "Development", "start": "2025-04-01", "end": "2025-07-18" },
+        { "name": "Beta launch", "milestone": true, "date": "2025-07-21",
+          "color": "#FF6B6B", "marker": "*", "marker_size": 16 },
+        { "name": "Hardening",   "start": "2025-07-21", "end": "2025-09-12" },
+        { "name": "GA release",  "milestone": true, "date": "2025-09-15",
+          "color": "#70AD47" }
+      ]
+    }
+  ]
+}
