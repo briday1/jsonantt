@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jsonantt"
-version = "2026.15"
+version = "2026.16"
 description = "Generate Gantt charts from JSON descriptions using matplotlib"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -25,7 +25,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/briday1/jsonantt"
+Homepage = "https://jsonantt.readthedocs.io/en/latest/"
+Documentation = "https://jsonantt.readthedocs.io/en/latest/"
 Repository = "https://github.com/briday1/jsonantt"
 Issues = "https://github.com/briday1/jsonantt/issues"
 

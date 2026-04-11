@@ -1,7 +1,11 @@
 # jsonantt
 
+[![Documentation](https://readthedocs.org/projects/jsonantt/badge/?version=latest)](https://jsonantt.readthedocs.io/en/latest/) [![PyPI](https://img.shields.io/pypi/v/jsonantt)](https://pypi.org/project/jsonantt/)
+
 **jsonantt** generates beautiful Gantt chart images from a simple JSON description.  
 Charts are rendered with [matplotlib](https://matplotlib.org/) so they can be saved as `.png`, `.pdf`, `.svg`, and more.
+
+📖 **Full documentation:** https://jsonantt.readthedocs.io
 
 ---
 
