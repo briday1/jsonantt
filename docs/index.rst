@@ -1,7 +1,7 @@
 jsonantt
 ========
 
-.. image:: ../logo.png
+.. image:: _static/logo.png
    :alt: jsonantt logo
    :width: 160px
    :align: right
