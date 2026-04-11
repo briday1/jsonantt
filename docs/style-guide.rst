@@ -331,6 +331,10 @@ Each entry in ``table_columns`` is an object with the following fields:
      }
    }
 
+.. image:: _static/img/table-columns.png
+   :alt: Table output with custom columns
+   :width: 100%
+
 Full style example
 ------------------
 
@@ -380,3 +384,7 @@ And a maximally-configured reference block showing every field:
        "table_show_markers": true
      }
    }
+
+.. image:: _static/img/example-complex.png
+   :alt: Chart rendered with the complex.json style block
+   :width: 100%

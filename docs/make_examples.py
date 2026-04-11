@@ -11,6 +11,7 @@ Or let Read the Docs run it automatically via the pre_build job in
 from __future__ import annotations
 
 import sys
+from datetime import date
 from pathlib import Path
 
 # Make sure the local package is importable when run without an install
@@ -62,6 +63,30 @@ print(f"  {out.relative_to(Path(__file__).parent)}")
 out = OUT / "burn.png"
 config = load_chart(str(REPO_EXAMPLES / "costs.json"))
 render_burn_chart(config, str(out), dpi=150, field="cost", period="month", group_by=0, display_factor=0.001)
+print(f"  {out.relative_to(Path(__file__).parent)}")
+
+# ── date-line ──────────────────────────────────────────────────────────────────
+out = OUT / "dateline.png"
+config = load_chart(str(REPO_EXAMPLES / "simple.json"))
+render_chart(config, str(out), dpi=150, date_line=date(2024, 6, 1))
+print(f"  {out.relative_to(Path(__file__).parent)}")
+
+# ── renderdepth ────────────────────────────────────────────────────────────────
+out = OUT / "renderdepth.png"
+config = load_chart(str(REPO_EXAMPLES / "complex.json"))
+render_chart(config, str(out), dpi=150, render_depth=2)
+print(f"  {out.relative_to(Path(__file__).parent)}")
+
+# ── milestones-only table ──────────────────────────────────────────────────────
+out = OUT / "milestones-only.png"
+config = load_chart(str(REPO_EXAMPLES / "simple.json"))
+render_table(config, str(out), dpi=150, milestones_only=True)
+print(f"  {out.relative_to(Path(__file__).parent)}")
+
+# ── table with custom columns (costs.json) ────────────────────────────────────
+out = OUT / "table-columns.png"
+config = load_chart(str(REPO_EXAMPLES / "costs.json"))
+render_table(config, str(out), dpi=150)
 print(f"  {out.relative_to(Path(__file__).parent)}")
 
 print("Done.")

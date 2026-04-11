@@ -255,6 +255,10 @@ Add a vertical "today" line
 
    jsonantt project.json chart.png --date-line today
 
+.. image:: _static/img/dateline.png
+   :alt: Chart with a date-line marker
+   :width: 100%
+
 Render at higher resolution for print
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -269,6 +273,10 @@ Show only the top two nesting levels
 
    jsonantt project.json chart.png --renderdepth 2
 
+.. image:: _static/img/renderdepth.png
+   :alt: Chart limited to two nesting levels
+   :width: 100%
+
 Generate a milestone-only status summary
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -276,12 +284,20 @@ Generate a milestone-only status summary
 
    jsonantt -t project.json milestones.png --milestones-only
 
+.. image:: _static/img/milestones-only.png
+   :alt: Milestone-only task table
+   :width: 100%
+
 Compare a baseline with an updated schedule
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
    jsonantt planned.json compare.png --compare actual.json
+
+.. image:: _static/img/compare.png
+   :alt: Baseline vs actual comparison chart
+   :width: 100%
 
 Generate a monthly cost burn chart
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -293,3 +309,6 @@ Add a ``"cost"`` field to each task (e.g. ``"cost": 50000``), then:
    jsonantt project.json burn.png \
      --burn --burn-field cost --burn-period month --burn-group 0
 
+.. image:: _static/img/burn.png
+   :alt: Monthly cost burn chart
+   :width: 100%
