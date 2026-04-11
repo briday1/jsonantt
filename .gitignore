@@ -35,3 +35,6 @@ Thumbs.db
 *.pdf
 *.svg
 !examples/**/*.png
+!logo.png
+!logo.svg
+docs/_build/
