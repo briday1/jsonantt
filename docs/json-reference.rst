@@ -81,7 +81,7 @@ Each entry in ``tasks`` (and each entry in a task's ``children`` array) is a tas
    * - ``duration``
      - string
      - —
-     - Duration relative to ``start`` or the end of the ``not_before`` task. Format: ``<N><unit>`` where unit is ``d`` (days), ``w`` (weeks), ``m`` (calendar months), or ``y`` (calendar years). e.g. ``"3m"``, ``"2w"``, ``"90d"``.
+     - Duration relative to ``start`` or the end of the ``not_before`` task. Format: ``<N><unit>``. See duration units table below.
    * - ``not_before``
      - string
      - —
@@ -117,7 +117,33 @@ Each entry in ``tasks`` (and each entry in a task's ``children`` array) is a tas
    * - *(any)*
      - any
      - —
-     - Any additional field is stored and is accessible as a table column via ``style.table_columns``.
+     - Any additional field is stored on the task and is accessible as a table column via ``style.table_columns``.
+       Example: ``"cost": 50000``, ``"owner": "Alice"``.
+
+Duration units
+~~~~~~~~~~~~~~
+
+.. list-table::
+   :widths: 15 25 60
+   :header-rows: 1
+
+   * - Suffix
+     - Unit
+     - Behaviour
+   * - ``d``
+     - Days
+     - Exact calendar days. ``"14d"`` = 14 days.
+   * - ``w``
+     - Weeks
+     - 7 calendar days each. ``"2w"`` = 14 days.
+   * - ``m``
+     - Months
+     - Calendar months. ``"3m"`` from Jan 6 ends Apr 6.
+   * - ``y``
+     - Years
+     - Calendar years. ``"1y"`` from Jan 1 2024 ends Jan 1 2025.
+
+Examples: ``"90d"``, ``"3m"``, ``"2w"``, ``"1y"``, ``"18m"``.
 
 Date resolution order
 ~~~~~~~~~~~~~~~~~~~~~

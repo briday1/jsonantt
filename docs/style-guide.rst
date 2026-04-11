@@ -15,6 +15,114 @@ Every field is optional — the defaults produce a clean, publication-ready char
      "tasks": [ "..." ]
    }
 
+All fields at a glance
+----------------------
+
+.. list-table::
+   :widths: 28 16 14 42
+   :header-rows: 1
+
+   * - Field
+     - Category
+     - Default
+     - Purpose
+   * - ``width``
+     - Layout
+     - ``14.0``
+     - Figure width in inches
+   * - ``row_height``
+     - Layout
+     - ``0.3``
+     - Row height in inches
+   * - ``bar_height``
+     - Layout
+     - ``0.5``
+     - Bar height as fraction of row height
+   * - ``label_fraction``
+     - Layout
+     - ``0.0``
+     - Label panel width (0 = auto)
+   * - ``indent_size``
+     - Layout
+     - ``3``
+     - Spaces added per nesting depth
+   * - ``font_size``
+     - Typography
+     - ``12.0``
+     - Base font size in points
+   * - ``bold_tasks``
+     - Typography
+     - ``true``
+     - Auto-bold top-level task labels
+   * - ``number_tasks``
+     - Typography
+     - ``true``
+     - Prefix labels with hierarchy numbers
+   * - ``background``
+     - Colors
+     - ``"#FFFFFF"``
+     - Figure background color
+   * - ``grid_color``
+     - Colors
+     - ``"#E0E0E0"``
+     - Vertical gridline color
+   * - ``row_band_color``
+     - Colors
+     - ``"#F5F5F5"``
+     - Alternating row band fill
+   * - ``colors``
+     - Colors
+     - 10-color palette
+     - Auto-cycle colors for top-level tasks
+   * - ``subtask_lightening_pct``
+     - Colors
+     - ``0.0``
+     - Lighten child colors per depth level (%)
+   * - ``milestone_color``
+     - Milestones
+     - ``"#FFD700"``
+     - Default milestone marker color
+   * - ``milestone_marker``
+     - Milestones
+     - ``"D"``
+     - Default milestone marker symbol
+   * - ``milestone_size``
+     - Milestones
+     - ``14.0``
+     - Default milestone marker size (pts)
+   * - ``major_tick``
+     - Ticks
+     - ``null``
+     - Major tick interval (year/quarter/month/week/day)
+   * - ``minor_tick``
+     - Ticks
+     - ``null``
+     - Minor tick interval (year/quarter/month/week/day)
+   * - ``major_grid_width``
+     - Ticks
+     - ``2.0``
+     - Major gridline linewidth
+   * - ``minor_grid_width``
+     - Ticks
+     - ``1.5``
+     - Minor gridline linewidth
+   * - ``tick_position``
+     - Ticks
+     - ``"top"``
+     - Tick label position: top / bottom / both
+   * - ``table_colorize``
+     - Table
+     - ``true``
+     - Show color accent gutter in table output
+   * - ``table_show_markers``
+     - Table
+     - ``true``
+     - Draw milestone markers in table output
+   * - ``table_columns``
+     - Table
+     - ``[]``
+     - Custom ordered column definitions
+
 Layout
 ------
 
@@ -177,7 +285,51 @@ These fields only affect ``-t`` / ``--table`` output.
      - Draw milestone diamond markers in the table output.
    * - ``table_columns``
      - ``[]``
-     - Ordered list of column definitions. Empty uses the default column set. Each entry is an object: ``{"field": "name", "label": "Task", "width": 200}``. The ``field`` key maps to either a built-in field (``name``, ``start``, ``end``, ``duration``) or any custom field stored in the task.
+     - Ordered list of column definition objects. Empty list uses the default column set. See sub-table below.
+
+``table_columns`` column definition object
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each entry in ``table_columns`` is an object with the following fields:
+
+.. list-table::
+   :widths: 20 12 18 50
+   :header-rows: 1
+
+   * - Field
+     - Type
+     - Default
+     - Description
+   * - ``field``
+     - string
+     - **required**
+     - The data key to display. Built-in values: ``name``, ``start``, ``end``, ``duration``. Any custom key stored on a task (e.g. ``cost``, ``owner``) works too.
+   * - ``label``
+     - string
+     - same as ``field``
+     - Column header text.
+   * - ``width``
+     - number
+     - auto
+     - Column width in pixels.
+   * - ``align``
+     - string
+     - ``"left"``
+     - Text alignment: ``"left"``, ``"center"``, or ``"right"``.
+
+.. code-block:: json
+
+   {
+     "style": {
+       "table_columns": [
+         { "field": "name",  "label": "Task",       "width": 220 },
+         { "field": "start", "label": "Start",      "width": 100, "align": "center" },
+         { "field": "end",   "label": "End",        "width": 100, "align": "center" },
+         { "field": "owner", "label": "Owner",      "width": 120 },
+         { "field": "cost",  "label": "Budget ($)", "width": 100, "align": "right" }
+       ]
+     }
+   }
 
 Full style example
 ------------------

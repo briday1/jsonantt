@@ -11,6 +11,34 @@ Synopsis
 ``INPUT`` is a path to a JSON chart description file.
 ``OUTPUT`` is the destination image path. Supported formats: ``.png``, ``.pdf``, ``.svg``.
 
+Quick reference
+---------------
+
+.. list-table::
+   :widths: 38 62
+   :header-rows: 1
+
+   * - Command
+     - What it does
+   * - ``jsonantt in.json out.png``
+     - Gantt chart
+   * - ``jsonantt -t in.json out.png``
+     - Task table image
+   * - ``jsonantt in.json out.png --date-line today``
+     - Gantt chart with "today" line
+   * - ``jsonantt in.json out.png --renderdepth 2``
+     - Gantt chart, max 2 nesting levels
+   * - ``jsonantt planned.json out.png --compare actual.json``
+     - Compare two schedules (chart)
+   * - ``jsonantt -t planned.json out.png --compare actual.json``
+     - Compare two schedules (table)
+   * - ``jsonantt in.json out.png --burn --burn-field cost``
+     - Burn-down chart
+   * - ``jsonantt in.json out.csv --burn-table --burn-field cost``
+     - Burn matrix table
+   * - ``jsonantt -t in.json out.png --milestones-only``
+     - Milestone-only table
+
 Modes
 -----
 

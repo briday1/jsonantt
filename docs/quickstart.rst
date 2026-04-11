@@ -140,7 +140,15 @@ If tasks carry a numeric field (e.g. ``"cost": 50000``), generate a funded burn-
 Next steps
 ----------
 
-* :doc:`json-reference` — every field you can put in a JSON file
-* :doc:`style-guide` — every ``style`` option with defaults and examples
-* :doc:`cli` — full command-line reference
-* :doc:`examples` — annotated walkthroughs of the bundled examples
+.. list-table::
+   :widths: 30 70
+   :header-rows: 0
+
+   * - :doc:`json-reference`
+     - Every field you can put in a JSON file, with a full skeleton example
+   * - :doc:`style-guide`
+     - Every ``style`` option with defaults, sub-tables, and a complete reference block
+   * - :doc:`cli`
+     - Full command-line reference with a quick-reference table
+   * - :doc:`examples`
+     - Annotated walkthroughs of the three bundled examples plus common recipes
