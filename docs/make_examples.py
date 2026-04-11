@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from jsonantt.parser import load_chart
-from jsonantt.renderer import render_chart
+from jsonantt.renderer import render_burn_chart, render_chart, render_compare_chart, render_table
 
 OUT = Path(__file__).parent / "_static" / "img"
 OUT.mkdir(parents=True, exist_ok=True)
@@ -44,5 +44,24 @@ render(REPO_EXAMPLES / "dependencies.json", "example-dependencies.png")
 render(DOC_EXAMPLES / "quickstart.json",   "quickstart.png")
 render(DOC_EXAMPLES / "milestones.json",   "milestones.png")
 render(DOC_EXAMPLES / "durations.json",    "durations.png")
+
+# ── task table ───────────────────────────────────────────────────────────────
+out = OUT / "table.png"
+config = load_chart(str(REPO_EXAMPLES / "simple.json"))
+render_table(config, str(out), dpi=150)
+print(f"  {out.relative_to(Path(__file__).parent)}")
+
+# ── compare chart ─────────────────────────────────────────────────────────────
+out = OUT / "compare.png"
+planned = load_chart(str(REPO_EXAMPLES / "compare-planned.json"))
+actual  = load_chart(str(REPO_EXAMPLES / "compare-actual.json"))
+render_compare_chart(planned, actual, str(out), dpi=150)
+print(f"  {out.relative_to(Path(__file__).parent)}")
+
+# ── burn chart ────────────────────────────────────────────────────────────────
+out = OUT / "burn.png"
+config = load_chart(str(REPO_EXAMPLES / "costs.json"))
+render_burn_chart(config, str(out), dpi=150, field="cost", period="month", group_by=0, display_factor=0.001)
+print(f"  {out.relative_to(Path(__file__).parent)}")
 
 print("Done.")

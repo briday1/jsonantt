@@ -131,6 +131,10 @@ Render a task table
 
 Add ``--milestones-only`` to show only milestone rows, or ``--no-milestones`` to hide them.
 
+.. image:: _static/img/table.png
+   :alt: Task table output
+   :width: 100%
+
 Compare two schedules
 ---------------------
 
@@ -140,6 +144,10 @@ Compare two schedules
 
 The ``planned.json`` baseline is shown in full opacity; ``actual.json`` deviations appear alongside it.
 
+.. image:: _static/img/compare.png
+   :alt: Compare two schedules output
+   :width: 100%
+
 Burn chart
 ----------
 
@@ -148,6 +156,10 @@ If tasks carry a numeric field (e.g. ``"cost": 50000``), generate a funded burn-
 .. code-block:: bash
 
    jsonantt project.json burn.png --burn --burn-field cost --burn-period month --burn-group 0
+
+.. image:: _static/img/burn.png
+   :alt: Burn chart output
+   :width: 100%
 
 Next steps
 ----------
