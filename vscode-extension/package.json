@@ -1,0 +1,119 @@
+{
+  "name": "jsonantt",
+  "displayName": "jsonantt — Gantt Chart Preview",
+  "description": "Live-preview jsonantt Gantt charts, tables, and burn charts directly inside VS Code.",
+  "version": "0.1.0",
+  "publisher": "jsonantt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/briday1/jsonantt"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "gantt",
+    "chart",
+    "json",
+    "project management",
+    "visualization"
+  ],
+  "activationEvents": [
+    "onLanguage:json"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "jsonantt.preview",
+        "title": "Open jsonantt Preview",
+        "category": "jsonantt",
+        "icon": "$(graph)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "jsonantt.preview",
+          "when": "resourceLangId == json",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "jsonantt.preview",
+          "when": "resourceLangId == json"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "jsonantt",
+      "properties": {
+        "jsonantt.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Python executable that has jsonantt installed. Leave blank to use the first 'python3', 'python', or 'jsonantt' found on PATH."
+        },
+        "jsonantt.autoPreview": {
+          "type": "string",
+          "enum": [
+            "onType",
+            "onSave",
+            "manual"
+          ],
+          "enumDescriptions": [
+            "Re-render automatically while you type (debounced 500 ms)",
+            "Re-render only when the file is saved",
+            "Re-render only when you click the Refresh button"
+          ],
+          "default": "onSave",
+          "description": "Controls when the preview is refreshed."
+        },
+        "jsonantt.defaultChartType": {
+          "type": "string",
+          "enum": [
+            "chart",
+            "table",
+            "burn",
+            "burn-table"
+          ],
+          "enumDescriptions": [
+            "Gantt chart",
+            "Task table",
+            "Burn chart",
+            "Burn table"
+          ],
+          "default": "chart",
+          "description": "Default chart type shown when the preview opens."
+        },
+        "jsonantt.defaultDpi": {
+          "type": "number",
+          "default": 150,
+          "minimum": 72,
+          "maximum": 600,
+          "description": "Default image resolution in DPI (raster output only)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "npm run compile && vsce package --no-dependencies",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vscode/vsce": "^2.19.0",
+    "eslint": "^8.44.0",
+    "typescript": "^5.1.0"
+  }
+}
