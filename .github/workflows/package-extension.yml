@@ -1,12 +1,9 @@
-name: Package VS Code Extension
+name: Package and Publish VS Code Extension
 
 # Builds a self-contained .vsix for each supported platform by:
 #   1. Running PyInstaller on the native runner to produce a single-file binary.
 #   2. Bundling that binary into a platform-specific .vsix via vsce.
-#
-# Resulting artifacts are uploaded to GitHub Actions and can be published to
-# the Marketplace with:
-#   vsce publish --packagePath <vsix> --target <platform>
+#   3. Publishing the .vsix to the VS Code Marketplace (requires VSCE_PAT secret).
 
 on:
   workflow_dispatch:
@@ -135,3 +132,10 @@ jobs:
           name: vsix-${{ matrix.platform }}
           path: vscode-extension/*.vsix
           if-no-files-found: error
+
+      - name: Publish to VS Code Marketplace
+        if: ${{ secrets.VSCE_PAT != '' }}
+        working-directory: vscode-extension
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --target ${{ matrix.platform }} --no-dependencies --pat "$VSCE_PAT"
