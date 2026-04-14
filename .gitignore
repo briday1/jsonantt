@@ -43,3 +43,4 @@ docs/_build/
 vscode-extension/out/
 vscode-extension/node_modules/
 vscode-extension/*.vsix
+vscode-extension/bin/

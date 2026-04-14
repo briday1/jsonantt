@@ -118,7 +118,7 @@ export class PreviewPanel {
     this._postMessage({ type: "rendering" });
 
     const jsonText = this._document.getText();
-    const result = await renderChart(jsonText, this._options);
+    const result = await renderChart(jsonText, this._options, this._context.extensionPath);
 
     if (result.ok && result.svgData) {
       this._postMessage({ type: "rendered", svgData: result.svgData });
@@ -203,7 +203,7 @@ export class PreviewPanel {
     opts: RenderOptions
   ): Promise<void> {
     const { renderChart: rc } = await import("./renderer");
-    const result = await rc(this._document.getText(), opts);
+    const result = await rc(this._document.getText(), opts, this._context.extensionPath);
     if (result.ok && result.svgData) {
       fs.writeFileSync(outputPath, result.svgData, "utf8");
       vscode.window.showInformationMessage(`Chart exported to ${outputPath}`);

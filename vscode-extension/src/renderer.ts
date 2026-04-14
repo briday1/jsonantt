@@ -2,10 +2,11 @@
  * renderer.ts – spawns the jsonantt CLI in a child process and returns SVG bytes.
  *
  * Resolution order for the jsonantt executable:
- *   1. jsonantt.pythonPath setting  →  <pythonPath> -m jsonantt
- *   2. "jsonantt" binary on PATH
- *   3. "python3 -m jsonantt" on PATH
- *   4. "python -m jsonantt" on PATH
+ *   1. Bundled PyInstaller binary shipped inside the .vsix  (bin/<platform>-<arch>/jsonantt[.exe])
+ *   2. jsonantt.pythonPath setting  →  <pythonPath> -m jsonantt
+ *   3. "jsonantt" binary on PATH
+ *   4. "python3 -m jsonantt" on PATH
+ *   5. "python -m jsonantt" on PATH
  */
 import * as cp from "child_process";
 import * as fs from "fs";
@@ -37,12 +38,14 @@ export interface RenderResult {
 /**
  * Render the JSON content using the jsonantt CLI, returning the SVG as a string.
  *
- * @param jsonText   Raw JSON text from the editor buffer.
- * @param opts       Chart options selected in the webview.
+ * @param jsonText       Raw JSON text from the editor buffer.
+ * @param opts           Chart options selected in the webview.
+ * @param extensionPath  Absolute path to the installed extension directory.
  */
 export async function renderChart(
   jsonText: string,
-  opts: RenderOptions
+  opts: RenderOptions,
+  extensionPath: string
 ): Promise<RenderResult> {
   // Write the editor buffer to a temp input file.
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "jsonantt-"));
@@ -53,7 +56,7 @@ export async function renderChart(
     fs.writeFileSync(inputPath, jsonText, "utf8");
 
     const args = buildArgs(inputPath, outputPath, opts);
-    const { cmd, cmdArgs } = resolveCommand(args);
+    const { cmd, cmdArgs } = resolveCommand(args, extensionPath);
 
     await spawnCommand(cmd, cmdArgs);
 
@@ -149,7 +152,13 @@ interface ResolvedCommand {
  * Resolve which executable to use, returning the command and full argument list.
  * The first element of `jsonanttArgs` is the jsonantt input file path.
  */
-function resolveCommand(jsonanttArgs: string[]): ResolvedCommand {
+function resolveCommand(jsonanttArgs: string[], extensionPath: string): ResolvedCommand {
+  // 1. Bundled binary shipped inside the .vsix – no user install needed.
+  const bundledBin = getBundledBinaryPath(extensionPath);
+  if (bundledBin && fs.existsSync(bundledBin)) {
+    return { cmd: bundledBin, cmdArgs: jsonanttArgs };
+  }
+
   const cfg = vscode.workspace.getConfiguration("jsonantt");
   const pythonPath = cfg.get<string>("pythonPath", "").trim();
 
@@ -165,6 +174,23 @@ function resolveCommand(jsonanttArgs: string[]): ResolvedCommand {
   // Fall back to python module invocation.
   const python = commandExistsSync("python3") ? "python3" : "python";
   return { cmd: python, cmdArgs: ["-m", "jsonantt", ...jsonanttArgs] };
+}
+
+/**
+ * Return the path to the platform-specific bundled binary, or null if the
+ * current platform/arch combination is not recognised.
+ *
+ * Binaries live at:
+ *   <extensionPath>/bin/<process.platform>-<process.arch>/jsonantt[.exe]
+ *
+ * e.g.  bin/linux-x64/jsonantt
+ *       bin/darwin-arm64/jsonantt
+ *       bin/win32-x64/jsonantt.exe
+ */
+function getBundledBinaryPath(extensionPath: string): string | null {
+  const platformKey = `${process.platform}-${process.arch}`;
+  const exeName = process.platform === "win32" ? "jsonantt.exe" : "jsonantt";
+  return path.join(extensionPath, "bin", platformKey, exeName);
 }
 
 /** Synchronously check whether a command exists on PATH. */
