@@ -19,15 +19,20 @@ tables, and burn charts directly inside VS Code — no terminal required.
 
 ## Requirements
 
-`jsonantt` must be installed in the Python environment available to VS Code:
+`jsonantt` must be installed in the Python environment that VS Code is using.
+The extension automatically picks up the interpreter selected in the VS Code
+Python extension (the one shown in the status bar), so installing into a virtual
+environment just works:
 
 ```bash
 pip install jsonantt
 ```
 
-The extension looks for `jsonantt` on `PATH`, then tries
-`python3 -m jsonantt` and `python -m jsonantt`.  
-Use the `jsonantt.pythonPath` setting to point at a specific Python executable.
+If you need to override which Python is used, set `jsonantt.pythonPath` to the
+full path of a Python executable — for example
+`/home/you/.venv/bin/python` or `C:\Users\you\.venv\Scripts\python.exe`.
+Leave it blank (the default) to let the extension use VS Code's selected
+interpreter automatically.
 
 ---
 

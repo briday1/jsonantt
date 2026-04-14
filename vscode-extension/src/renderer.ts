@@ -159,21 +159,46 @@ function resolveCommand(jsonanttArgs: string[], extensionPath: string): Resolved
     return { cmd: bundledBin, cmdArgs: jsonanttArgs };
   }
 
+  // 2. Explicit user override via jsonantt.pythonPath.
   const cfg = vscode.workspace.getConfiguration("jsonantt");
   const pythonPath = cfg.get<string>("pythonPath", "").trim();
-
   if (pythonPath) {
     return { cmd: pythonPath, cmdArgs: ["-m", "jsonantt", ...jsonanttArgs] };
   }
 
-  // Try the standalone "jsonantt" binary first (fastest).
+  // 3. VS Code's selected Python interpreter (set by the Python extension).
+  //    This respects virtual environments chosen in the status bar.
+  const vscodePython = getVsCodePythonPath();
+  if (vscodePython && fs.existsSync(vscodePython)) {
+    return { cmd: vscodePython, cmdArgs: ["-m", "jsonantt", ...jsonanttArgs] };
+  }
+
+  // 4. Try the standalone "jsonantt" binary on PATH (fastest if installed globally).
   if (commandExistsSync("jsonantt")) {
     return { cmd: "jsonantt", cmdArgs: jsonanttArgs };
   }
 
-  // Fall back to python module invocation.
+  // 5. Fall back to whatever python3/python is on PATH.
   const python = commandExistsSync("python3") ? "python3" : "python";
   return { cmd: python, cmdArgs: ["-m", "jsonantt", ...jsonanttArgs] };
+}
+
+/**
+ * Return the path to the Python interpreter that VS Code's Python extension
+ * has selected (e.g. a virtual environment), or an empty string if none is set.
+ *
+ * Checks `python.defaultInterpreterPath` (current API) and the legacy
+ * `python.pythonPath` setting as a fallback.
+ */
+export function getVsCodePythonPath(): string {
+  const pyCfg = vscode.workspace.getConfiguration("python");
+  const modern = pyCfg.get<string>("defaultInterpreterPath", "").trim();
+  if (modern) {
+    return modern;
+  }
+  // Legacy setting kept for older Python extension versions.
+  const legacy = pyCfg.get<string>("pythonPath", "").trim();
+  return legacy;
 }
 
 /**
