@@ -5,8 +5,8 @@ import argparse
 from datetime import date, datetime
 import sys
 
-from .parser import load_chart
-from .renderer import render_burn_chart, render_burn_table, render_chart, render_compare_chart, render_compare_table, render_table
+from jsonantt.parser import load_chart
+from jsonantt.renderer import render_burn_chart, render_burn_table, render_chart, render_compare_chart, render_compare_table, render_table
 
 
 def _parse_cli_date(value: str, date_format: str) -> date:
