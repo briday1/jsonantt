@@ -44,7 +44,6 @@ export class PreviewPanel {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode.Uri.file(path.join(context.extensionPath, "src", "webview")),
           vscode.Uri.file(path.join(context.extensionPath, "out", "webview")),
         ],
       }
@@ -218,9 +217,9 @@ export class PreviewPanel {
     const webview = this._panel.webview;
 
     // Resolve webview-safe URIs for the static assets.
-    // We ship the assets under src/webview/ (dev) and copy them to out/webview/ via compile.
+    // Assets are copied from src/webview/ to out/webview/ during compile.
     const assetBase = vscode.Uri.file(
-      path.join(this._context.extensionPath, "src", "webview")
+      path.join(this._context.extensionPath, "out", "webview")
     );
     const jsUri = webview.asWebviewUri(
       vscode.Uri.file(path.join(assetBase.fsPath, "panel.js"))

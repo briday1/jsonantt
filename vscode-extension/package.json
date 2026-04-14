@@ -103,13 +103,14 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
+    "compile": "tsc -p ./ && copyfiles -u 2 src/webview/* out/webview",
     "watch": "tsc -watch -p ./",
     "package": "npm run compile && vsce package --no-dependencies",
     "lint": "eslint src --ext ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "copyfiles": "^2.4.1",
     "@types/vscode": "^1.80.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
