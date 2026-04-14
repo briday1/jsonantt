@@ -16,6 +16,9 @@ on:
       - "vscode-extension/**"
       - ".github/workflows/package-extension.yml"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ── Step 1: build PyInstaller binaries ──────────────────────────────────────
   build-binary:
