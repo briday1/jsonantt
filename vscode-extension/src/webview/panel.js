@@ -152,7 +152,18 @@
 
   function showSvg(svgData) {
     errorBox.hidden = true;
-    svgContainer.innerHTML = svgData;
+    // Render via data-URI <img> so that any embedded SVG scripts are never executed.
+    const img = document.createElement("img");
+    img.style.maxWidth = "100%";
+    img.style.height = "auto";
+    img.style.display = "block";
+    img.alt = "jsonantt chart";
+    // btoa requires Latin-1; encode to UTF-8 bytes first via encodeURIComponent.
+    img.src =
+      "data:image/svg+xml;base64," +
+      btoa(unescape(encodeURIComponent(svgData)));
+    svgContainer.innerHTML = "";
+    svgContainer.appendChild(img);
     statusBar.className = "";
     statusText.textContent = "Rendered at " + new Date().toLocaleTimeString();
   }

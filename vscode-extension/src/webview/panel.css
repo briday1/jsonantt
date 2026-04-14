@@ -130,7 +130,7 @@ button.secondary:hover {
   overflow: auto;
 }
 
-#svgContainer svg {
+#svgContainer img {
   max-width: 100%;
   height: auto;
   display: block;
