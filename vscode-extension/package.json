@@ -3,7 +3,7 @@
   "displayName": "jsonantt — Gantt Chart Preview",
   "description": "Live-preview jsonantt Gantt charts, tables, and burn charts directly inside VS Code.",
   "version": "0.1.0",
-  "publisher": "jsonantt",
+  "publisher": "brianday",
   "license": "MIT",
   "repository": {
     "type": "git",
