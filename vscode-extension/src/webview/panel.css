@@ -1,0 +1,160 @@
+/* panel.css – styles for the jsonantt preview webview.
+ * Uses VS Code CSS variables so it adapts to any colour theme.
+ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+/* ── Toolbar ──────────────────────────────────────────────────── */
+#toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  border-bottom: 1px solid var(--vscode-panel-border, #444);
+  padding: 6px 8px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+label {
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  user-select: none;
+}
+
+select,
+input[type="text"],
+input[type="number"] {
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+  padding: 2px 5px;
+  font-size: inherit;
+  font-family: inherit;
+  outline: none;
+  min-width: 0;
+}
+
+select:focus,
+input:focus {
+  border-color: var(--vscode-focusBorder);
+  outline: none;
+}
+
+input[type="color"] {
+  border: none;
+  background: transparent;
+  padding: 0;
+  width: 28px;
+  height: 22px;
+  cursor: pointer;
+}
+
+button {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  border-radius: 2px;
+  padding: 3px 10px;
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+button:active {
+  opacity: 0.85;
+}
+
+button.secondary {
+  background: var(--vscode-button-secondaryBackground, transparent);
+  color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
+  border: 1px solid var(--vscode-button-border, #666);
+}
+
+button.secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground, rgba(255,255,255,0.05));
+}
+
+.muted {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.88em;
+}
+
+/* ── Status bar ───────────────────────────────────────────────── */
+#statusBar {
+  padding: 2px 8px;
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-statusBar-background, transparent);
+  border-bottom: 1px solid var(--vscode-panel-border, #333);
+  min-height: 18px;
+}
+
+#statusBar.rendering #statusText {
+  color: var(--vscode-progressBar-background, #007acc);
+}
+
+#statusBar.error #statusText {
+  color: var(--vscode-errorForeground, #f44);
+}
+
+/* ── Preview area ─────────────────────────────────────────────── */
+#previewArea {
+  padding: 12px;
+  overflow: auto;
+}
+
+#svgContainer img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* ── Error box ────────────────────────────────────────────────── */
+#errorBox {
+  margin-top: 12px;
+  background: var(--vscode-inputValidation-errorBackground, rgba(244,0,0,0.12));
+  border: 1px solid var(--vscode-inputValidation-errorBorder, #f44);
+  border-radius: 4px;
+  padding: 10px 14px;
+}
+
+#errorText {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--vscode-errorForeground, #f88);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.9em;
+}
+
+#installBtn {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}

@@ -1,0 +1,141 @@
+name: Package and Publish VS Code Extension
+
+# Builds a self-contained .vsix for each supported platform by:
+#   1. Running PyInstaller on the native runner to produce a single-file binary.
+#   2. Bundling that binary into a platform-specific .vsix via vsce.
+#   3. Publishing the .vsix to the VS Code Marketplace (requires VSCE_PAT secret).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "jsonantt/**"
+      - "pyproject.toml"
+      - "vscode-extension/**"
+      - ".github/workflows/package-extension.yml"
+
+jobs:
+  # ── Step 1: build PyInstaller binaries ──────────────────────────────────────
+  build-binary:
+    name: Binary (${{ matrix.platform }})
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+            exe: jsonantt
+          - os: macos-13
+            platform: darwin-x64
+            exe: jsonantt
+          - os: macos-14
+            platform: darwin-arm64
+            exe: jsonantt
+          - os: windows-latest
+            platform: win32-x64
+            exe: jsonantt.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install jsonantt and PyInstaller
+        run: pip install --upgrade pip pyinstaller .
+        # 'pip install .' installs jsonantt + matplotlib from the repo
+
+      - name: Build standalone binary with PyInstaller
+        run: >
+          pyinstaller
+          --onefile
+          --name jsonantt
+          --collect-all matplotlib
+          --collect-all jsonantt
+          jsonantt/cli.py
+
+      # Smoke-test: the binary must exit 0 when passed --help
+      - name: Smoke-test binary
+        shell: bash
+        run: ./dist/${{ matrix.exe }} --help
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.platform }}
+          path: dist/${{ matrix.exe }}
+          if-no-files-found: error
+
+  # ── Step 2: package one .vsix per platform ──────────────────────────────────
+  package-vsix:
+    name: VSIX (${{ matrix.platform }})
+    needs: build-binary
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x64
+            exe: jsonantt
+          - platform: darwin-x64
+            exe: jsonantt
+          - platform: darwin-arm64
+            exe: jsonantt
+          - platform: win32-x64
+            exe: jsonantt.exe
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Node dependencies
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Compile TypeScript
+        working-directory: vscode-extension
+        run: npm run compile
+
+      - name: Download binary for ${{ matrix.platform }}
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-${{ matrix.platform }}
+          path: vscode-extension/bin/${{ matrix.platform }}/
+
+      - name: Mark binary as executable (non-Windows)
+        if: matrix.platform != 'win32-x64'
+        run: chmod +x vscode-extension/bin/${{ matrix.platform }}/${{ matrix.exe }}
+
+      - name: Package platform-specific .vsix
+        working-directory: vscode-extension
+        run: >
+          npx vsce package
+          --target ${{ matrix.platform }}
+          --no-dependencies
+
+      - name: Upload .vsix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ matrix.platform }}
+          path: vscode-extension/*.vsix
+          if-no-files-found: error
+
+      - name: Publish to VS Code Marketplace
+        if: ${{ secrets.VSCE_PAT != '' }}
+        working-directory: vscode-extension
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --target ${{ matrix.platform }} --no-dependencies --pat "$VSCE_PAT"
