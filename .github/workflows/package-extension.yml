@@ -79,6 +79,8 @@ jobs:
     needs: build-binary
     permissions:
       contents: read
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
     strategy:
       fail-fast: false
       matrix:
@@ -134,8 +136,6 @@ jobs:
           if-no-files-found: error
 
       - name: Publish to VS Code Marketplace
-        if: ${{ secrets.VSCE_PAT != '' }}
+        if: env.VSCE_PAT != ''
         working-directory: vscode-extension
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npx vsce publish --target ${{ matrix.platform }} --no-dependencies --pat "$VSCE_PAT"
