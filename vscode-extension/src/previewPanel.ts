@@ -196,7 +196,9 @@ export class PreviewPanel {
         const explicitPython = cfg.get<string>("pythonPath", "").trim();
         const python =
           explicitPython || getVsCodePythonPath() || "python3";
-        terminal.sendText(`"${python}" -m pip install jsonantt`);
+        // Escape any embedded double-quotes in the path before shell-quoting.
+        const escapedPython = python.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        terminal.sendText(`"${escapedPython}" -m pip install jsonantt`);
         break;
       }
     }
