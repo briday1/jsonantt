@@ -136,4 +136,4 @@ jobs:
       - name: Publish to VS Code Marketplace
         if: env.VSCE_PAT != ''
         working-directory: vscode-extension
-        run: npx vsce publish --target ${{ matrix.platform }} --no-dependencies --pat "$VSCE_PAT"
+        run: npx vsce publish --packagePath *.vsix --pat "$VSCE_PAT"
