@@ -1,0 +1,120 @@
+{
+  "title": "Cross-Functional Delivery Plan",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "width": 13,
+    "font_size": 11,
+    "major_tick": "month",
+    "minor_tick": "week",
+    "table_columns": [
+      "task",
+      "name",
+      { "field": "assignee", "title": "Owner" },
+      { "field": "cost", "title": "Cost (k$)", "rollup": "sum", "total": true, "total_level": 0, "display_factor": 0.001 },
+      "description"
+    ]
+  },
+  "tasks": [
+    {
+      "name": "Discovery & Alignment",
+      "color": "#4063D8",
+      "description": "Shape the delivery scope while downstream planning starts in parallel.",
+      "children": [
+        {
+          "name": "Stakeholder interviews",
+          "start": "2024-04-01",
+          "end": "2024-04-12",
+          "assignee": "Morgan",
+          "cost": "$18,000",
+          "description": "Confirm operational constraints, target users, and decision owners."
+        },
+        {
+          "name": "Business case",
+          "start": "2024-04-08",
+          "end": "2024-04-26",
+          "assignee": "Riley",
+          "cost": "$24,000",
+          "description": "Model expected value, success criteria, and release economics."
+        },
+        {
+          "name": "Scope sign-off",
+          "milestone": true,
+          "date": "2024-04-29",
+          "assignee": "Avery",
+          "cost": "$5,000",
+          "description": "Decision point that authorizes build and launch preparation."
+        }
+      ]
+    },
+    {
+      "name": "Platform Build",
+      "color": "#CB3C33",
+      "description": "Backend and data work begin before discovery is fully closed.",
+      "children": [
+        {
+          "name": "Integration design",
+          "start": "2024-04-15",
+          "end": "2024-05-03",
+          "assignee": "Casey",
+          "cost": "$42,000",
+          "description": "Define service boundaries, integration contracts, and rollout sequencing."
+        },
+        {
+          "name": "Core services",
+          "start": "2024-04-29",
+          "end": "2024-06-14",
+          "assignee": "Jordan",
+          "cost": "$138,000",
+          "description": "Build APIs, orchestration, and persistence for the initial release."
+        },
+        {
+          "name": "Reporting pipeline",
+          "start": "2024-05-13",
+          "end": "2024-06-21",
+          "assignee": "Sam",
+          "cost": "$67,000",
+          "description": "Stand up downstream reporting and quality controls while core services continue."
+        }
+      ]
+    },
+    {
+      "name": "Experience & Readiness",
+      "color": "#389826",
+      "description": "Frontend, training, and go-live tasks intentionally overlap the final build window.",
+      "children": [
+        {
+          "name": "Operator workflows",
+          "start": "2024-05-06",
+          "end": "2024-06-28",
+          "assignee": "Taylor",
+          "cost": "$121,000",
+          "description": "Deliver the primary operator journeys and role-based UX refinements."
+        },
+        {
+          "name": "Training content",
+          "start": "2024-06-03",
+          "end": "2024-07-05",
+          "assignee": "Jamie",
+          "cost": "$31,000",
+          "description": "Prepare facilitator guides, demos, and adoption material before launch."
+        },
+        {
+          "name": "Release rehearsal",
+          "milestone": true,
+          "date": "2024-07-08",
+          "assignee": "Avery",
+          "cost": "$9,000",
+          "description": "Full rehearsal of support handoffs, runbooks, and go-live criteria."
+        },
+        {
+          "name": "Launch window",
+          "milestone": true,
+          "date": "2024-07-15",
+          "assignee": "Avery",
+          "cost": "$12,000",
+          "description": "Production deployment and early-hypercare command window."
+        }
+      ]
+    }
+  ]
+}

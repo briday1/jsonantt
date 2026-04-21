@@ -56,6 +56,7 @@ class Task:
     color: Optional[str] = None
     milestone: bool = False
     milestone_date: Optional[date] = None
+    milestone_dates: List[date] = field(default_factory=list)
     children: List["Task"] = field(default_factory=list)
     # -- deferred-resolution fields (set by parser, consumed during resolve) --
     not_before: Optional[str] = None   # id of task whose end becomes this start
@@ -73,6 +74,8 @@ class Task:
     def effective_start(self) -> Optional[date]:
         """Earliest start date, resolving through children if needed."""
         if self.milestone:
+            if self.milestone_dates:
+                return min(self.milestone_dates)
             return self.milestone_date or self.start
         if self.start is not None:
             return self.start
@@ -83,6 +86,8 @@ class Task:
     def effective_end(self) -> Optional[date]:
         """Latest end date, resolving through children if needed."""
         if self.milestone:
+            if self.milestone_dates:
+                return max(self.milestone_dates)
             return self.milestone_date or self.start
         if self.end is not None:
             return self.end

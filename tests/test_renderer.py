@@ -454,6 +454,40 @@ class TestRenderChart:
         )
         self._render(cfg, ".png")
 
+    def test_render_milestone_chain_on_single_row(self):
+        cfg = parse_chart(
+            {
+                "tasks": [
+                    {
+                        "name": "Launch Gates",
+                        "description": "Repeated gate on one row.",
+                        "milestone": True,
+                        "date": ["2024-06-01", "2024-06-15", "2024-07-01"],
+                    }
+                ]
+            }
+        )
+        self._render(cfg, ".png")
+
+    def test_render_nested_tasks_alias_with_milestone_chain(self):
+        cfg = parse_chart(
+            {
+                "tasks": [
+                    {
+                        "name": "Release Track",
+                        "tasks": [
+                            {
+                                "name": "Gate Reviews",
+                                "milestone": True,
+                                "date": ["2024-06-01", "2024-06-15", "2024-07-01"],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        self._render(cfg, ".png")
+
     def test_render_chart_rejects_negative_render_depth(self):
         cfg = _simple_config()
         fd, path = tempfile.mkstemp(suffix=".png")
@@ -581,6 +615,33 @@ class TestRenderTable:
                 content = fh.read()
             assert "Task,Name,Assignee,Cost" in content
             assert "1.,Task A,Morgan,1200" in content
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_table_csv_with_milestone_date_list(self):
+        cfg = parse_chart(
+            {
+                "style": {
+                    "table_columns": ["task", "name", "date"]
+                },
+                "tasks": [
+                    {
+                        "name": "Launch Gates",
+                        "milestone": True,
+                        "date": ["2024-06-01", "2024-06-15", "2024-07-01"],
+                    }
+                ],
+            }
+        )
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            render_table(cfg, path, dpi=72)
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            assert "Task,Name,Date" in content
+            assert '1.,Launch Gates,"[""2024-06-01"", ""2024-06-15"", ""2024-07-01""]"' in content
         finally:
             if os.path.exists(path):
                 os.unlink(path)

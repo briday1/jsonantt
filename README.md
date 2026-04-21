@@ -11,9 +11,9 @@ Charts are rendered with [matplotlib](https://matplotlib.org/) so they can be sa
 
 ## Features
 
-- **Infinitely nestable tasks** — define sub-tasks, sub-sub-tasks, etc.
+- **Infinitely nestable tasks** — define sub-tasks, sub-sub-tasks, etc., using either `tasks` or legacy `children`.
 - **Auto date computation** — parent task start/end are derived automatically from children when not specified.
-- **Milestone markers** — easy `"milestone": true` flag with chart-level defaults and per-milestone marker overrides.
+- **Milestone markers** — easy `"milestone": true` flag with chart-level defaults and per-milestone marker overrides, including milestone chains on one row via a `date` list.
 - **Optional task descriptions and extra fields** — add long-form context per task, plus arbitrary metadata like assignee or cost for table output.
 - **Fully colourable** — set colours per-task; children inherit their parent's colour.
 - **Recursive child colour lightening** — inherited subtask colours can optionally lighten at each nested level.
@@ -55,12 +55,12 @@ pip install -e .
   "tasks": [
     {
       "name": "Phase 1 – Planning",
-      "children": [
+      "tasks": [
         { "name": "Requirements", "start": "2024-01-08", "end": "2024-01-19" },
         { "name": "Architecture",  "start": "2024-01-15", "end": "2024-01-31" }
       ]
     },
-    { "name": "Planning done", "milestone": true, "date": "2024-01-31" },
+    { "name": "Planning done", "milestone": true, "date": ["2024-01-24", "2024-01-31"] },
     {
       "name": "Phase 2 – Build",
       "color": "#70AD47",
@@ -176,6 +176,7 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 | `end` | date string | Optional chart x-axis end date |
 | `style` | object | Visual style overrides (see below) |
 | `tasks` | array | Top-level list of task objects |
+| `children` | array | Legacy alias for top-level `tasks` |
 
 ### Task object
 
@@ -191,13 +192,39 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 | `not_before` | string | `id` of another task — this task starts immediately after that task ends |
 | `color` | CSS hex string | Bar colour, or milestone colour override for an individual milestone (e.g. `"#4472C4"`) |
 | `milestone` | boolean | Render as a diamond milestone instead of a bar |
-| `date` | date string | Milestone date (used when `milestone: true`) |
+| `date` | date string or array of date strings | Milestone date, or a list of milestone dates to draw multiple markers on the same row when `milestone: true` |
 | `marker` | string | Milestone marker override for an individual milestone (matplotlib marker symbol such as `"D"`, `"o"`, `"s"`, `"*"`) |
 | `marker_size` | number | Override milestone diamond size in points |
 | `bold` | boolean | Render label in bold (top-level tasks are auto-bolded by default) |
-| `children` | array | Nested sub-tasks (infinitely nestable) |
+| `tasks` | array | Nested sub-tasks (preferred key, infinitely nestable) |
+| `children` | array | Legacy alias for nested sub-tasks |
 
 > **Auto date computation:** When a task has `children` but no explicit `start`/`end`, the dates are computed automatically as the earliest child start and latest child end, recursively.
+
+> **Milestone chains:** When `milestone: true`, `date` may be either one date string or a list of date strings. A list draws multiple milestone markers on the same task row while keeping the same label, description, color, and marker settings.
+
+```json
+{
+  "title": "Release Gates",
+  "tasks": [
+    {
+      "name": "Release Track",
+      "tasks": [
+        {
+          "name": "Gate Reviews",
+          "description": "Same milestone row, repeated checkpoints.",
+          "milestone": true,
+          "date": ["2024-06-01", "2024-06-15", "2024-07-01"],
+          "marker": "D",
+          "color": "#C0504D"
+        }
+      ]
+    }
+  ]
+}
+```
+
+`tasks` and `children` are interchangeable at both the chart root and inside nested task objects. If both are present on the same object, jsonantt reads both lists in order.
 
 > **Duration formats:** `d`/`day`/`days`, `w`/`week`/`weeks`, `m`/`month`/`months`, `y`/`year`/`years` — e.g. `"14d"`, `"2w"`, `"3m"`, `"1y"`.
 
@@ -261,6 +288,10 @@ One child level, `-r 2`:
 ![render depth mid](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/renderdepth-mid.png)
 
 Top level only, `-r 1`:
+
+### Chained milestones
+
+[examples/chained-milestones.json](https://github.com/briday1/jsonantt/blob/main/examples/chained-milestones.json) — nested `tasks` with multiple milestone dates on one row
 
 ![render depth top](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/renderdepth-top.png)
 
@@ -341,6 +372,34 @@ CSV export:
 CSV export:
 
 [examples/costs-table.csv](https://github.com/briday1/jsonantt/blob/main/examples/costs-table.csv)
+
+### Overlapping cost plan
+
+[examples/costs-overlap.json](https://github.com/briday1/jsonantt/blob/main/examples/costs-overlap.json) — a more realistic cost plan with overlapping workstreams, nested tasks, milestones, and rolled-up `Cost (k$)` values
+
+Chart output:
+
+![overlapping cost chart](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/costs-overlap.png)
+
+Table output, `-t`:
+
+![overlapping cost table](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/costs-overlap-table.png)
+
+CSV export:
+
+[examples/costs-overlap-table.csv](https://github.com/briday1/jsonantt/blob/main/examples/costs-overlap-table.csv)
+
+Monthly burn chart, `--burn --burn-period month --burn-group 0 --burn-display-factor 0.001`:
+
+![overlapping cost burn](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/costs-overlap-burn.png)
+
+Monthly burn matrix, `--burn-table --burn-period month --burn-group 0 --burn-display-factor 0.001`:
+
+![overlapping cost burn table](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/costs-overlap-burn-table.png)
+
+Burn CSV export:
+
+[examples/costs-overlap-burn-table.csv](https://github.com/briday1/jsonantt/blob/main/examples/costs-overlap-burn-table.csv)
 
 ### Complex roadmap
 

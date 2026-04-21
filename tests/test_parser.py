@@ -66,6 +66,16 @@ class TestTaskEffectiveDates:
         assert t.effective_start == date(2024, 6, 15)
         assert t.effective_end == date(2024, 6, 15)
 
+    def test_milestone_list_uses_min_and_max_dates(self):
+        t = Task(
+            name="M",
+            milestone=True,
+            milestone_date=date(2024, 6, 15),
+            milestone_dates=[date(2024, 6, 20), date(2024, 6, 15), date(2024, 6, 18)],
+        )
+        assert t.effective_start == date(2024, 6, 15)
+        assert t.effective_end == date(2024, 6, 20)
+
     def test_is_parent_true_with_children(self):
         child = Task(name="C")
         parent = Task(name="P", children=[child])
@@ -152,6 +162,52 @@ class TestParseChart:
         assert parent.effective_start == date(2024, 1, 1)
         assert parent.effective_end == date(2024, 1, 25)
 
+    def test_nested_tasks_alias(self):
+        data = {
+            "tasks": [
+                {
+                    "name": "Parent",
+                    "tasks": [
+                        {"name": "Child 1", "start": "2024-01-01", "end": "2024-01-15"},
+                        {"name": "Child 2", "start": "2024-01-10", "end": "2024-01-25"},
+                    ],
+                }
+            ]
+        }
+        cfg = parse_chart(data)
+        parent = cfg.tasks[0]
+        assert len(parent.children) == 2
+        assert parent.children[0].name == "Child 1"
+        assert parent.effective_start == date(2024, 1, 1)
+        assert parent.effective_end == date(2024, 1, 25)
+
+    def test_top_level_children_alias(self):
+        data = {
+            "children": [
+                {"name": "Task A", "start": "2024-01-01", "end": "2024-01-31"}
+            ]
+        }
+        cfg = parse_chart(data)
+        assert len(cfg.tasks) == 1
+        assert cfg.tasks[0].name == "Task A"
+
+    def test_nested_tasks_and_children_are_combined(self):
+        data = {
+            "tasks": [
+                {
+                    "name": "Parent",
+                    "tasks": [
+                        {"name": "Child 1", "start": "2024-01-01", "end": "2024-01-05"}
+                    ],
+                    "children": [
+                        {"name": "Child 2", "start": "2024-01-06", "end": "2024-01-10"}
+                    ],
+                }
+            ]
+        }
+        cfg = parse_chart(data)
+        assert [child.name for child in cfg.tasks[0].children] == ["Child 1", "Child 2"]
+
     def test_deep_nesting(self):
         data = {
             "tasks": [
@@ -192,7 +248,24 @@ class TestParseChart:
         t = cfg.tasks[0]
         assert t.milestone is True
         assert t.milestone_date == date(2024, 7, 1)
+        assert t.milestone_dates == [date(2024, 7, 1)]
         assert t.color == "#FF0000"
+
+    def test_milestone_date_list_parsed(self):
+        data = {
+            "tasks": [
+                {
+                    "name": "Go live",
+                    "milestone": True,
+                    "date": ["2024-07-01", "2024-07-15", "2024-08-01"],
+                }
+            ]
+        }
+        cfg = parse_chart(data)
+        t = cfg.tasks[0]
+        assert t.milestone is True
+        assert t.milestone_date == date(2024, 7, 1)
+        assert t.milestone_dates == [date(2024, 7, 1), date(2024, 7, 15), date(2024, 8, 1)]
 
     def test_chart_start_end_parsed(self):
         data = {
@@ -254,6 +327,7 @@ class TestParseChart:
 
         assert milestone.start == date(2024, 1, 10)
         assert milestone.milestone_date == date(2024, 1, 10)
+        assert milestone.milestone_dates == [date(2024, 1, 10)]
 
 
     def test_shorthand_string_task(self):
@@ -300,3 +374,12 @@ class TestLoadChart:
         if os.path.exists(path):
             cfg = load_chart(path)
             assert cfg.tasks
+
+    def test_example_chained_milestones_json(self):
+        """Smoke-test the bundled chained-milestones.json example."""
+        here = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(here, "examples", "chained-milestones.json")
+        if os.path.exists(path):
+            cfg = load_chart(path)
+            assert cfg.tasks
+            assert cfg.tasks[0].children

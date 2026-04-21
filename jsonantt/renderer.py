@@ -386,14 +386,39 @@ def _format_table_value(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (dict, list)):
-        return json.dumps(value, ensure_ascii=False)
+        return json.dumps(value, ensure_ascii=False, default=_json_table_value_default)
     return str(value)
+
+
+def _json_table_value_default(value: Any) -> Any:
+    """Serialize table values that are not natively JSON encodable."""
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ")
+    if isinstance(value, date):
+        return value.isoformat()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
+def _task_milestone_dates(task: Task) -> List[date]:
+    """Return normalized milestone dates for rendering and tables."""
+    if task.milestone_dates:
+        return task.milestone_dates
+    if task.milestone_date is not None:
+        return [task.milestone_date]
+    if task.start is not None:
+        return [task.start]
+    return []
 
 
 def _task_field_value(task: Task, field: str) -> Any:
     """Return a raw field value from *task* for table rendering."""
     if field == "date":
-        return task.milestone_date
+        milestone_dates = _task_milestone_dates(task)
+        if not milestone_dates:
+            return None
+        if len(milestone_dates) == 1:
+            return milestone_dates[0]
+        return milestone_dates
     if hasattr(task, field):
         return getattr(task, field)
     return task.fields.get(field)
@@ -2231,50 +2256,50 @@ def _draw_compare_bar(ax_bar, row: _Row, y: float, style: Style, outlined: bool)
 
 def _draw_milestone(ax_bar, row: _Row, y: float, style: Style) -> None:
     task = row.task
-    if task.milestone_date is None and task.start is None:
+    milestone_dates = _task_milestone_dates(task)
+    if not milestone_dates:
         return
 
-    ms_date = task.milestone_date or task.start
     color = _milestone_color(row, style)
     marker = _milestone_marker(task, style)
     size = task.marker_size if task.marker_size is not None else style.milestone_size
-    x = mdates.date2num(ms_date)
-
-    ax_bar.plot(
-        x, y,
-        marker=marker,
-        markersize=size,
-        color=color,
-        markeredgecolor="none",
-        zorder=5,
-        linestyle="none",
-    )
+    for ms_date in milestone_dates:
+        x = mdates.date2num(ms_date)
+        ax_bar.plot(
+            x, y,
+            marker=marker,
+            markersize=size,
+            color=color,
+            markeredgecolor="none",
+            zorder=5,
+            linestyle="none",
+        )
 
 
 def _draw_compare_milestone(ax_bar, row: _Row, y: float, style: Style, outlined: bool) -> None:
     """Draw a compare milestone, either planned outline or actual fill."""
     task = row.task
-    if task.milestone_date is None and task.start is None:
+    milestone_dates = _task_milestone_dates(task)
+    if not milestone_dates:
         return
 
-    ms_date = task.milestone_date or task.start
     color = _milestone_color(row, style)
     marker = _milestone_marker(task, style)
     size = task.marker_size if task.marker_size is not None else style.milestone_size
-    x = mdates.date2num(ms_date)
-
-    ax_bar.plot(
-        x,
-        y,
-        marker=marker,
-        markersize=size * (1.22 if outlined else 1.0),
-        markerfacecolor="none" if outlined else color,
-        markeredgecolor=color,
-        markeredgewidth=1.8 if outlined else 0.0,
-        color=color,
-        zorder=4.8 if outlined else 5.2,
-        linestyle="none",
-    )
+    for ms_date in milestone_dates:
+        x = mdates.date2num(ms_date)
+        ax_bar.plot(
+            x,
+            y,
+            marker=marker,
+            markersize=size * (1.22 if outlined else 1.0),
+            markerfacecolor="none" if outlined else color,
+            markeredgecolor=color,
+            markeredgewidth=1.8 if outlined else 0.0,
+            color=color,
+            zorder=4.8 if outlined else 5.2,
+            linestyle="none",
+        )
 
 
 def _row_label_text(row: _Row, style: Style) -> str:

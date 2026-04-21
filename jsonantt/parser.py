@@ -32,7 +32,7 @@ def parse_chart(data: Dict[str, Any]) -> ChartConfig:
 
     tasks = [
         _parse_task(t, date_format, depth=0)
-        for t in data.get("tasks", [])
+        for t in _nested_task_items(data)
     ]
 
     # Resolve not_before references now that all tasks are parsed
@@ -69,6 +69,23 @@ def parse_chart(data: Dict[str, Any]) -> ChartConfig:
 def _parse_date(value: str, fmt: str):
     """Parse *value* with *fmt*; return a :class:`datetime.date`."""
     return datetime.strptime(value, fmt).date()
+
+
+def _parse_milestone_dates(value: Any, fmt: str) -> List[date]:
+    """Parse a milestone ``date`` field as one or many dates."""
+    if isinstance(value, list):
+        return [_parse_date(item, fmt) for item in value]
+    return [_parse_date(value, fmt)]
+
+
+def _nested_task_items(data: Dict[str, Any]) -> List[Any]:
+    """Return nested task items, accepting both ``tasks`` and legacy ``children``."""
+    items: List[Any] = []
+    if "tasks" in data:
+        items.extend(data.get("tasks", []))
+    if "children" in data:
+        items.extend(data.get("children", []))
+    return items
 
 
 def _parse_style(data: Dict[str, Any]) -> Style:
@@ -133,18 +150,22 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
         end = _apply_duration(start, duration_spec)
         duration_spec = None  # resolved; no need to carry it further
 
+    milestone_dates: List[date] = []
     milestone_date = None
     if milestone:
         if "date" in data:
-            milestone_date = _parse_date(data["date"], date_format)
+            milestone_dates = _parse_milestone_dates(data["date"], date_format)
+            milestone_date = milestone_dates[0] if milestone_dates else None
         elif start is not None:
+            milestone_dates = [start]
             milestone_date = start
         elif end is not None:
+            milestone_dates = [end]
             milestone_date = end
 
     children: List[Task] = [
         _parse_task(child, date_format, depth + 1)
-        for child in data.get("children", [])
+        for child in _nested_task_items(data)
     ]
 
     known_fields = {
@@ -161,6 +182,7 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
         "marker",
         "marker_size",
         "bold",
+        "tasks",
         "children",
     }
     extra_fields = {
@@ -178,6 +200,7 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
         color=color,
         milestone=milestone,
         milestone_date=milestone_date,
+        milestone_dates=milestone_dates,
         children=children,
         not_before=not_before,
         duration_spec=duration_spec,
@@ -288,6 +311,7 @@ def _resolve_not_before(all_tasks: List[Task], all_tasks_by_id: Dict[str, Task])
                 continue  # ref not yet resolved; try again next pass
             task.start = ref_end
             if task.milestone and task.milestone_date is None:
+                task.milestone_dates = [task.start]
                 task.milestone_date = task.start
             if task.duration_spec is not None:
                 task.end = _apply_duration(task.start, task.duration_spec)
