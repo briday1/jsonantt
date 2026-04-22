@@ -7,7 +7,7 @@
 import * as path from "path";
 import * as fs from "fs";
 import * as vscode from "vscode";
-import { renderChart, RenderOptions } from "./renderer";
+import { renderChart, getVsCodePythonPath, RenderOptions } from "./renderer";
 
 export class PreviewPanel {
   /** The single active instance, if any. */
@@ -190,7 +190,15 @@ export class PreviewPanel {
       case "installJsonantt": {
         const terminal = vscode.window.createTerminal("Install jsonantt");
         terminal.show();
-        terminal.sendText("pip install jsonantt");
+        // Use the same Python that the extension would use for rendering so
+        // jsonantt is installed into the correct environment.
+        const cfg = vscode.workspace.getConfiguration("jsonantt");
+        const explicitPython = cfg.get<string>("pythonPath", "").trim();
+        const python =
+          explicitPython || getVsCodePythonPath() || "python3";
+        // Escape any embedded double-quotes in the path before shell-quoting.
+        const escapedPython = python.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        terminal.sendText(`"${escapedPython}" -m pip install jsonantt`);
         break;
       }
     }

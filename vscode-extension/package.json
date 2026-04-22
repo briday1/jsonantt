@@ -58,7 +58,7 @@
         "jsonantt.pythonPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the Python executable that has jsonantt installed. Leave blank to use the first 'python3', 'python', or 'jsonantt' found on PATH."
+          "description": "Path to the Python executable that has jsonantt installed (e.g. a virtual-environment Python). Leave blank to use VS Code's selected Python interpreter automatically."
         },
         "jsonantt.autoPreview": {
           "type": "string",
