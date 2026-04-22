@@ -208,6 +208,93 @@ class TestParseChart:
         cfg = parse_chart(data)
         assert [child.name for child in cfg.tasks[0].children] == ["Child 1", "Child 2"]
 
+    def test_filename_only_task_entry_inlines_tasks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            child_path = os.path.join(temp_dir, "child.json")
+            with open(child_path, "w", encoding="utf-8") as fh:
+                json.dump(
+                    {
+                        "title": "Included Plan",
+                        "style": {"width": 20},
+                        "tasks": [
+                            {"name": "Child 1", "start": "2024-01-01", "end": "2024-01-05"},
+                            {"name": "Child 2", "start": "2024-01-06", "end": "2024-01-10"},
+                        ],
+                    },
+                    fh,
+                )
+
+            parent_path = os.path.join(temp_dir, "parent.json")
+            with open(parent_path, "w", encoding="utf-8") as fh:
+                json.dump(
+                    {
+                        "tasks": [
+                            {"filename": "child.json"},
+                            {"name": "Local", "start": "2024-01-11", "end": "2024-01-12"},
+                        ]
+                    },
+                    fh,
+                )
+
+            cfg = load_chart(parent_path)
+
+        assert [task.name for task in cfg.tasks] == ["Child 1", "Child 2", "Local"]
+        assert cfg.style.width == Style().width
+
+    def test_task_filename_nests_included_tasks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            child_path = os.path.join(temp_dir, "child.json")
+            with open(child_path, "w", encoding="utf-8") as fh:
+                json.dump(
+                    {
+                        "dateformat": "%d/%m/%Y",
+                        "tasks": [
+                            {"name": "Child 1", "start": "01/02/2024", "end": "03/02/2024"},
+                            {"name": "Child 2", "start": "04/02/2024", "end": "08/02/2024"},
+                        ],
+                    },
+                    fh,
+                )
+
+            parent_path = os.path.join(temp_dir, "parent.json")
+            with open(parent_path, "w", encoding="utf-8") as fh:
+                json.dump(
+                    {
+                        "tasks": [
+                            {
+                                "name": "Program",
+                                "filename": "child.json",
+                                "children": [
+                                    {"name": "Local", "start": "2024-02-09", "end": "2024-02-10"}
+                                ],
+                            }
+                        ]
+                    },
+                    fh,
+                )
+
+            cfg = load_chart(parent_path)
+
+        parent = cfg.tasks[0]
+        assert parent.name == "Program"
+        assert [child.name for child in parent.children] == ["Child 1", "Child 2", "Local"]
+        assert parent.children[0].start == date(2024, 2, 1)
+        assert parent.children[1].end == date(2024, 2, 8)
+
+    def test_filename_include_cycle_raises(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            a_path = os.path.join(temp_dir, "a.json")
+            b_path = os.path.join(temp_dir, "b.json")
+
+            with open(a_path, "w", encoding="utf-8") as fh:
+                json.dump({"tasks": [{"filename": "b.json"}]}, fh)
+
+            with open(b_path, "w", encoding="utf-8") as fh:
+                json.dump({"tasks": [{"filename": "a.json"}]}, fh)
+
+            with pytest.raises(ValueError, match="Circular filename reference"):
+                load_chart(a_path)
+
     def test_deep_nesting(self):
         data = {
             "tasks": [
@@ -251,6 +338,18 @@ class TestParseChart:
         assert t.milestone_dates == [date(2024, 7, 1)]
         assert t.color == "#FF0000"
 
+    def test_major_milestone_implies_milestone(self):
+        data = {
+            "tasks": [
+                {"name": "Executive Gate", "major_milestone": True, "date": "2024-07-01"}
+            ]
+        }
+        cfg = parse_chart(data)
+        t = cfg.tasks[0]
+        assert t.milestone is True
+        assert t.major_milestone is True
+        assert t.milestone_dates == [date(2024, 7, 1)]
+
     def test_milestone_date_list_parsed(self):
         data = {
             "tasks": [
@@ -279,7 +378,7 @@ class TestParseChart:
 
     def test_style_parsed(self):
         data = {
-            "style": {"width": 20, "font_size": 12, "indent_size": 4, "number_tasks": False, "table_colorize": False, "table_show_markers": False, "milestone_color": "#FFFF00", "milestone_marker": "o", "subtask_lightening_pct": 20, "table_columns": ["task", "name", {"field": "cost", "title": "Cost"}]},
+            "style": {"width": 20, "font_size": 12, "indent_size": 4, "number_tasks": False, "table_colorize": False, "table_show_markers": False, "milestone_color": "#FFFF00", "milestone_edge_color": "#222222", "milestone_marker": "o", "rollup_milestones": True, "rollup_major_milestones_only": True, "number_milestones": True, "major_milestone_color": "#C0504D", "major_milestone_edge_color": "#7F3128", "major_milestone_marker": "s", "major_milestone_size": 18, "subtask_lightening_pct": 20, "table_columns": ["task", "name", {"field": "cost", "title": "Cost"}]},
             "tasks": [],
         }
         cfg = parse_chart(data)
@@ -290,9 +389,26 @@ class TestParseChart:
         assert cfg.style.table_colorize is False
         assert cfg.style.table_show_markers is False
         assert cfg.style.milestone_color == "#FFFF00"
+        assert cfg.style.milestone_edge_color == "#222222"
         assert cfg.style.milestone_marker == "o"
+        assert cfg.style.rollup_milestones is True
+        assert cfg.style.rollup_major_milestones_only is True
+        assert cfg.style.number_milestones is True
+        assert cfg.style.major_milestone_color == "#C0504D"
+        assert cfg.style.major_milestone_edge_color == "#7F3128"
+        assert cfg.style.major_milestone_marker == "s"
+        assert cfg.style.major_milestone_size == 18
         assert cfg.style.subtask_lightening_pct == 20
         assert cfg.style.table_columns == ["task", "name", {"field": "cost", "title": "Cost"}]
+
+    def test_task_edge_color_override_parsed(self):
+        data = {
+            "tasks": [
+                {"name": "Go live", "milestone": True, "date": "2024-07-01", "edge_color": "#111111"}
+            ]
+        }
+        cfg = parse_chart(data)
+        assert cfg.tasks[0].edge_color == "#111111"
 
     def test_task_marker_override_parsed(self):
         data = {
@@ -383,3 +499,11 @@ class TestLoadChart:
             cfg = load_chart(path)
             assert cfg.tasks
             assert cfg.tasks[0].children
+
+    def test_example_composed_plan_json(self):
+        """Smoke-test the bundled composed-plan.json example."""
+        here = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(here, "examples", "composed-plan.json")
+        if os.path.exists(path):
+            cfg = load_chart(path)
+            assert cfg.tasks

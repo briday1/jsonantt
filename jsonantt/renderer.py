@@ -29,12 +29,43 @@ from .models import Arrow, ChartConfig, Style, Task
 
 def _milestone_marker(task: Task, style: Style) -> str:
     """Return the marker symbol for a milestone, preferring task override."""
-    return task.marker if task.marker else style.milestone_marker
+    if task.marker:
+        return task.marker
+    if task.major_milestone and style.major_milestone_marker:
+        return style.major_milestone_marker
+    return style.milestone_marker
+
+
+def _task_milestone_color(task: Task, style: Style) -> str:
+    """Return the milestone face color for a task."""
+    if task.color:
+        return task.color
+    if task.major_milestone and style.major_milestone_color:
+        return style.major_milestone_color
+    return style.milestone_color
+
+
+def _milestone_edge_color(task: Task, style: Style) -> Optional[str]:
+    """Return the milestone edge color for a task when configured."""
+    if task.edge_color:
+        return task.edge_color
+    if task.major_milestone and style.major_milestone_edge_color:
+        return style.major_milestone_edge_color
+    return style.milestone_edge_color
+
+
+def _milestone_size(task: Task, style: Style) -> float:
+    """Return the marker size for a milestone task."""
+    if task.marker_size is not None:
+        return task.marker_size
+    if task.major_milestone and style.major_milestone_size is not None:
+        return style.major_milestone_size
+    return style.milestone_size
 
 
 def _milestone_color(row: _Row, style: Style) -> str:
     """Return the milestone color for a row, preferring task color override."""
-    return row.task.color if row.task.color else style.milestone_color
+    return _task_milestone_color(row.task, style)
 
 
 def _lighten(color: str, amount: float = 0.0) -> str:
@@ -62,7 +93,7 @@ def _lighten(color: str, amount: float = 0.0) -> str:
 class _Row:
     """A flattened task row ready for rendering."""
 
-    __slots__ = ("task", "depth", "row_index", "color", "number", "path_key")
+    __slots__ = ("task", "depth", "row_index", "color", "number", "path_key", "milestone_label", "rolled_milestones")
 
     def __init__(
         self,
@@ -79,6 +110,18 @@ class _Row:
         self.color = color
         self.number = number
         self.path_key = path_key
+        self.milestone_label: Optional[str] = None
+        self.rolled_milestones: List[_MilestoneOverlay] = []
+
+
+class _MilestoneOverlay:
+    """A milestone rendered on an ancestor row after rollup."""
+
+    __slots__ = ("task", "label")
+
+    def __init__(self, task: Task, label: Optional[str] = None) -> None:
+        self.task = task
+        self.label = label
 
 
 class _CompareRow:
@@ -1386,17 +1429,7 @@ def render_table(
         if show_milestone_marker:
             marker_x = gutter_width / 2.0
             marker_y = y + row_units / 2.0
-            marker_color = _milestone_color(row, style)
-            ax.plot(
-                marker_x,
-                marker_y,
-                marker=_milestone_marker(row.task, style),
-                markersize=max(6, style.milestone_size * 0.65),
-                color=marker_color,
-                markeredgecolor="none",
-                linestyle="none",
-                zorder=4,
-            )
+            _draw_table_milestone_marker(ax, marker_x, marker_y, row.task, style, label=row.milestone_label)
 
         for boundary in x_starts[1:]:
             ax.plot([boundary, boundary], [y, y + row_units], color=divider_color, linewidth=1.0)
@@ -1630,15 +1663,13 @@ def render_compare_table(
         if show_milestone_marker:
             marker_x = gutter_width / 2.0
             marker_y = y + row_units / 2.0
-            ax.plot(
+            _draw_table_milestone_marker(
+                ax,
                 marker_x,
                 marker_y,
-                marker=_milestone_marker(row.task, style),
-                markersize=max(6, style.milestone_size * 0.65),
-                color=_milestone_color(row.actual if row.actual is not None else row.planned, style),
-                markeredgecolor="none",
-                linestyle="none",
-                zorder=4,
+                row.task,
+                style,
+                label=_compare_row_milestone_label(row),
             )
 
         for boundary in x_starts[1:]:
@@ -1784,6 +1815,14 @@ def _flatten(
         number = number_prefix + str(task_idx + 1)
         path_key = path_prefix + (task.name,)
         row = _Row(task=task, depth=depth, row_index=0, color=color, number=number, path_key=path_key)
+        if task.children and style.rollup_milestones and not (max_depth_index is None or depth < max_depth_index):
+            row.rolled_milestones = [
+                _MilestoneOverlay(milestone_task)
+                for milestone_task in _collect_descendant_milestones(
+                    task.children,
+                    major_only=style.rollup_major_milestones_only,
+                )
+            ]
         rows.append(row)
 
         if task.children and (max_depth_index is None or depth < max_depth_index):
@@ -1803,7 +1842,37 @@ def _flatten(
     for i, r in enumerate(rows):
         r.row_index = i
 
+    if depth == 0:
+        _assign_row_milestone_labels(rows, style)
+
     return rows
+
+
+def _collect_descendant_milestones(tasks: List[Task], major_only: bool = False) -> List[Task]:
+    """Return descendant milestone tasks in tree order."""
+    milestones: List[Task] = []
+    for task in tasks:
+        if task.milestone and (not major_only or task.major_milestone):
+            milestones.append(task)
+        if task.children:
+            milestones.extend(_collect_descendant_milestones(task.children, major_only=major_only))
+    return milestones
+
+
+def _assign_row_milestone_labels(rows: List[_Row], style: Style) -> None:
+    """Assign sequential milestone labels across visible and rolled-up milestones."""
+    counter = 1
+    for row in rows:
+        row.milestone_label = None
+        if row.task.milestone and style.number_milestones:
+            row.milestone_label = f"M{counter}"
+            counter += 1
+
+        for overlay in row.rolled_milestones:
+            overlay.label = None
+            if style.number_milestones:
+                overlay.label = f"M{counter}"
+                counter += 1
 
 
 def _prepare_rows(config: ChartConfig, render_depth: int) -> List[_Row]:
@@ -2157,6 +2226,8 @@ def _draw_row(ax_lbl, ax_bar, row: _Row, n: int, style: Style,
     else:
         _draw_bar(ax_bar, row, y, style)
 
+    _draw_rolled_up_milestones(ax_bar, row, y, style)
+
 
 def _draw_compare_row(
     ax_lbl,
@@ -2193,12 +2264,14 @@ def _draw_compare_row(
             _draw_compare_milestone(ax_bar, row.planned, y, style, outlined=True)
         else:
             _draw_compare_bar(ax_bar, row.planned, y, style, outlined=True)
+        _draw_compare_rolled_milestones(ax_bar, row.planned, y, style, outlined=True)
 
     if row.actual is not None:
         if row.actual.task.milestone:
             _draw_compare_milestone(ax_bar, row.actual, y, style, outlined=False)
         else:
             _draw_compare_bar(ax_bar, row.actual, y, style, outlined=False)
+        _draw_compare_rolled_milestones(ax_bar, row.actual, y, style, outlined=False)
 
 
 def _draw_bar(ax_bar, row: _Row, y: float, style: Style) -> None:
@@ -2255,37 +2328,46 @@ def _draw_compare_bar(ax_bar, row: _Row, y: float, style: Style, outlined: bool)
 
 
 def _draw_milestone(ax_bar, row: _Row, y: float, style: Style) -> None:
-    task = row.task
-    milestone_dates = _task_milestone_dates(task)
-    if not milestone_dates:
-        return
-
-    color = _milestone_color(row, style)
-    marker = _milestone_marker(task, style)
-    size = task.marker_size if task.marker_size is not None else style.milestone_size
-    for ms_date in milestone_dates:
-        x = mdates.date2num(ms_date)
-        ax_bar.plot(
-            x, y,
-            marker=marker,
-            markersize=size,
-            color=color,
-            markeredgecolor="none",
-            zorder=5,
-            linestyle="none",
-        )
+    _draw_task_milestone(ax_bar, row.task, y, style, label=row.milestone_label)
 
 
 def _draw_compare_milestone(ax_bar, row: _Row, y: float, style: Style, outlined: bool) -> None:
     """Draw a compare milestone, either planned outline or actual fill."""
-    task = row.task
+    _draw_task_milestone(ax_bar, row.task, y, style, label=row.milestone_label, outlined=outlined)
+
+
+def _draw_rolled_up_milestones(ax_bar, row: _Row, y: float, style: Style) -> None:
+    """Draw descendant milestones that were rolled up onto a visible row."""
+    for overlay in row.rolled_milestones:
+        _draw_task_milestone(ax_bar, overlay.task, y, style, label=overlay.label)
+
+
+def _draw_compare_rolled_milestones(ax_bar, row: _Row, y: float, style: Style, outlined: bool) -> None:
+    """Draw rolled-up descendant milestones for compare output."""
+    for overlay in row.rolled_milestones:
+        _draw_task_milestone(ax_bar, overlay.task, y, style, label=overlay.label, outlined=outlined)
+
+
+def _draw_task_milestone(
+    ax_bar,
+    task: Task,
+    y: float,
+    style: Style,
+    label: Optional[str] = None,
+    outlined: bool = False,
+) -> None:
+    """Draw a milestone task, optionally with numbering text."""
     milestone_dates = _task_milestone_dates(task)
     if not milestone_dates:
         return
 
-    color = _milestone_color(row, style)
+    color = _task_milestone_color(task, style)
+    edge_color = _milestone_edge_color(task, style)
     marker = _milestone_marker(task, style)
-    size = task.marker_size if task.marker_size is not None else style.milestone_size
+    size = _milestone_size(task, style)
+    effective_edge_color = edge_color if edge_color else color
+    marker_edge_width = 1.8 if outlined else (1.2 if edge_color else 0.0)
+
     for ms_date in milestone_dates:
         x = mdates.date2num(ms_date)
         ax_bar.plot(
@@ -2294,12 +2376,71 @@ def _draw_compare_milestone(ax_bar, row: _Row, y: float, style: Style, outlined:
             marker=marker,
             markersize=size * (1.22 if outlined else 1.0),
             markerfacecolor="none" if outlined else color,
-            markeredgecolor=color,
-            markeredgewidth=1.8 if outlined else 0.0,
-            color=color,
+            markeredgecolor=effective_edge_color if (outlined or edge_color) else "none",
+            markeredgewidth=marker_edge_width,
+            color=effective_edge_color if outlined else color,
             zorder=4.8 if outlined else 5.2,
             linestyle="none",
         )
+        if label:
+            _draw_milestone_label(ax_bar, x, y, label, color, effective_edge_color, outlined, size)
+
+
+def _draw_milestone_label(
+    ax_bar,
+    x: float,
+    y: float,
+    label: str,
+    color: str,
+    edge_color: str,
+    outlined: bool,
+    size: float,
+) -> None:
+    """Draw text centered over a milestone marker."""
+    text_color = edge_color if outlined else _darken(color, 0.72)
+    ax_bar.text(
+        x,
+        y,
+        label,
+        ha="center",
+        va="center",
+        fontsize=max(5.0, size * 0.40),
+        fontweight="bold",
+        color=text_color,
+        zorder=6.0,
+        clip_on=True,
+    )
+
+
+def _draw_table_milestone_marker(
+    ax,
+    x: float,
+    y: float,
+    task: Task,
+    style: Style,
+    label: Optional[str] = None,
+    outlined: bool = False,
+) -> None:
+    """Draw a milestone marker in a table gutter cell."""
+    color = _task_milestone_color(task, style)
+    edge_color = _milestone_edge_color(task, style)
+    effective_edge_color = edge_color if edge_color else color
+    size = max(6, _milestone_size(task, style) * 0.65)
+
+    ax.plot(
+        x,
+        y,
+        marker=_milestone_marker(task, style),
+        markersize=size * (1.12 if outlined else 1.0),
+        markerfacecolor="none" if outlined else color,
+        markeredgecolor=effective_edge_color if (outlined or edge_color) else "none",
+        markeredgewidth=1.5 if outlined else (1.1 if edge_color else 0.0),
+        color=effective_edge_color if outlined else color,
+        linestyle="none",
+        zorder=4,
+    )
+    if label:
+        _draw_milestone_label(ax, x, y, label, color, effective_edge_color, outlined, size)
 
 
 def _row_label_text(row: _Row, style: Style) -> str:
@@ -2307,7 +2448,7 @@ def _row_label_text(row: _Row, style: Style) -> str:
     if not style.number_tasks:
         return row.task.name
 
-    number_str = row.number + "." if "." not in row.number else row.number
+    number_str = row.milestone_label or (row.number + "." if "." not in row.number else row.number)
     return number_str + "  " + row.task.name
 
 
@@ -2316,7 +2457,7 @@ def _compare_row_label_text(row: _CompareRow, style: Style) -> str:
     if not style.number_tasks:
         return _compare_display_name(row)
 
-    number_str = row.number + "." if "." not in row.number else row.number
+    number_str = _compare_row_milestone_label(row) or (row.number + "." if "." not in row.number else row.number)
     return number_str + "  " + _compare_display_name(row)
 
 
@@ -2329,12 +2470,26 @@ def _compare_display_name(row: _CompareRow) -> str:
 
 def _row_table_number(row: _Row) -> str:
     """Return the numbering shown in the table Task column."""
+    if row.milestone_label is not None:
+        return row.milestone_label
     return row.number + "." if "." not in row.number else row.number
 
 
 def _compare_row_table_number(row: _CompareRow) -> str:
     """Return the numbering shown in the compare table Task column."""
+    milestone_label = _compare_row_milestone_label(row)
+    if milestone_label is not None:
+        return milestone_label
     return row.number + "." if "." not in row.number else row.number
+
+
+def _compare_row_milestone_label(row: _CompareRow) -> Optional[str]:
+    """Return the visible milestone label for a compare row, when present."""
+    if row.actual is not None and row.actual.milestone_label is not None:
+        return row.actual.milestone_label
+    if row.planned is not None and row.planned.milestone_label is not None:
+        return row.planned.milestone_label
+    return None
 
 
 def _compare_title(planned_config: ChartConfig, actual_config: ChartConfig) -> str:

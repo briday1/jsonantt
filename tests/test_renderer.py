@@ -19,7 +19,9 @@ from jsonantt.renderer import (
     _format_compare_offset,
     _lighten,
     _milestone_color,
+    _milestone_edge_color,
     _milestone_marker,
+    _milestone_size,
     _prepare_compare_rows,
     _row_label_text,
     _row_table_number,
@@ -295,6 +297,40 @@ class TestFlatten:
         row = _flatten(cfg.tasks, cfg.style)[0]
         assert _milestone_color(row, cfg.style) == "#00FF00"
 
+    def test_milestone_edge_color_uses_task_override_then_style(self):
+        cfg = parse_chart(
+            {
+                "style": {"milestone_edge_color": "#222222"},
+                "tasks": [
+                    {"name": "Release", "milestone": True, "date": "2024-01-10", "edge_color": "#00FF00"},
+                    {"name": "Gate", "milestone": True, "date": "2024-01-12"},
+                ],
+            }
+        )
+        rows = _flatten(cfg.tasks, cfg.style)
+        assert _milestone_edge_color(rows[0].task, cfg.style) == "#00FF00"
+        assert _milestone_edge_color(rows[1].task, cfg.style) == "#222222"
+
+    def test_major_milestone_uses_major_style_defaults(self):
+        cfg = parse_chart(
+            {
+                "style": {
+                    "major_milestone_color": "#C0504D",
+                    "major_milestone_edge_color": "#7F3128",
+                    "major_milestone_marker": "s",
+                    "major_milestone_size": 18,
+                },
+                "tasks": [
+                    {"name": "Executive Gate", "major_milestone": True, "date": "2024-01-10"}
+                ],
+            }
+        )
+        row = _flatten(cfg.tasks, cfg.style)[0]
+        assert _milestone_color(row, cfg.style) == "#C0504D"
+        assert _milestone_edge_color(row.task, cfg.style) == "#7F3128"
+        assert _milestone_marker(row.task, cfg.style) == "s"
+        assert _milestone_size(row.task, cfg.style) == 18
+
     def test_milestone_task_marker_overrides_style_marker(self):
         cfg = parse_chart(
             {
@@ -355,6 +391,91 @@ class TestFlatten:
         rows = _flatten(cfg.tasks, cfg.style)
         assert _row_table_number(rows[0]) == "1."
         assert _row_table_number(rows[1]) == "1.1"
+
+    def test_number_milestones_uses_m_labels(self):
+        cfg = parse_chart(
+            {
+                "style": {"number_milestones": True},
+                "tasks": [
+                    {"name": "Task A", "start": "2024-01-01", "end": "2024-01-31"},
+                    {"name": "Gate 1", "milestone": True, "date": "2024-02-01"},
+                    {"name": "Gate 2", "milestone": True, "date": "2024-02-05"},
+                ],
+            }
+        )
+        rows = _flatten(cfg.tasks, cfg.style)
+        assert rows[1].milestone_label == "M1"
+        assert rows[2].milestone_label == "M2"
+        assert _row_table_number(rows[1]) == "M1"
+        assert _row_label_text(rows[1], cfg.style) == "M1  Gate 1"
+
+    def test_rollup_milestones_attaches_hidden_descendants_recursively(self):
+        cfg = parse_chart(
+            {
+                "style": {"rollup_milestones": True, "number_milestones": True},
+                "tasks": [
+                    {
+                        "name": "Program",
+                        "children": [
+                            {
+                                "name": "Phase 1",
+                                "children": [
+                                    {"name": "Gate 1", "milestone": True, "date": "2024-01-10"},
+                                    {
+                                        "name": "Phase 1b",
+                                        "children": [
+                                            {"name": "Gate 2", "milestone": True, "date": "2024-01-15"}
+                                        ],
+                                    },
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        rows = _flatten(cfg.tasks, cfg.style, max_depth=1)
+        assert [overlay.task.name for overlay in rows[0].rolled_milestones] == ["Gate 1", "Gate 2"]
+        assert [overlay.label for overlay in rows[0].rolled_milestones] == ["M1", "M2"]
+
+    def test_rollup_major_milestones_only_filters_overlays(self):
+        cfg = parse_chart(
+            {
+                "style": {
+                    "rollup_milestones": True,
+                    "rollup_major_milestones_only": True,
+                    "number_milestones": True,
+                },
+                "tasks": [
+                    {
+                        "name": "Program",
+                        "children": [
+                            {"name": "Gate 1", "milestone": True, "date": "2024-01-10"},
+                            {"name": "Gate 2", "major_milestone": True, "date": "2024-01-15"},
+                        ],
+                    }
+                ],
+            }
+        )
+        rows = _flatten(cfg.tasks, cfg.style, max_depth=1)
+        assert [overlay.task.name for overlay in rows[0].rolled_milestones] == ["Gate 2"]
+        assert [overlay.label for overlay in rows[0].rolled_milestones] == ["M1"]
+
+    def test_rollup_milestones_is_disabled_by_default(self):
+        cfg = parse_chart(
+            {
+                "tasks": [
+                    {
+                        "name": "Program",
+                        "children": [
+                            {"name": "Gate 1", "milestone": True, "date": "2024-01-10"}
+                        ],
+                    }
+                ],
+            }
+        )
+        rows = _flatten(cfg.tasks, cfg.style, max_depth=1)
+        assert rows[0].rolled_milestones == []
 
 
 # ---------------------------------------------------------------------------
@@ -645,6 +766,73 @@ class TestRenderTable:
         finally:
             if os.path.exists(path):
                 os.unlink(path)
+
+    def test_render_table_csv_uses_milestone_labels_in_task_column(self):
+        cfg = parse_chart(
+            {
+                "style": {
+                    "number_milestones": True,
+                    "table_columns": ["task", "name", "date"],
+                },
+                "tasks": [
+                    {"name": "Task A", "start": "2024-01-01", "end": "2024-01-05"},
+                    {"name": "Launch Gates", "milestone": True, "date": ["2024-06-01", "2024-06-15"]},
+                ],
+            }
+        )
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            render_table(cfg, path, dpi=72)
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            assert "Task,Name,Date" in content
+            assert 'M1,Launch Gates,"[""2024-06-01"", ""2024-06-15""]"' in content
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_render_chart_with_rolled_up_and_numbered_milestones(self):
+        cfg = parse_chart(
+            {
+                "style": {"rollup_milestones": True, "number_milestones": True, "milestone_edge_color": "#222222"},
+                "tasks": [
+                    {
+                        "name": "Program",
+                        "children": [
+                            {"name": "Build", "start": "2024-01-01", "end": "2024-01-31"},
+                            {"name": "Gate", "milestone": True, "date": "2024-01-15", "edge_color": "#111111"},
+                        ],
+                    }
+                ],
+            }
+        )
+        self._render(cfg, ".png")
+
+    def test_render_chart_with_major_milestone_rollup_only(self):
+        cfg = parse_chart(
+            {
+                "style": {
+                    "rollup_milestones": True,
+                    "rollup_major_milestones_only": True,
+                    "number_milestones": True,
+                    "major_milestone_color": "#C0504D",
+                    "major_milestone_edge_color": "#7F3128",
+                    "major_milestone_marker": "s",
+                },
+                "tasks": [
+                    {
+                        "name": "Program",
+                        "children": [
+                            {"name": "Build", "start": "2024-01-01", "end": "2024-01-31"},
+                            {"name": "Minor Gate", "milestone": True, "date": "2024-01-10"},
+                            {"name": "Executive Gate", "major_milestone": True, "date": "2024-01-20"},
+                        ],
+                    }
+                ],
+            }
+        )
+        self._render(cfg, ".png", render_depth=1)
 
     def test_render_table_csv_with_display_factor(self):
         cfg = parse_chart(

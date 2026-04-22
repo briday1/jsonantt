@@ -1,0 +1,26 @@
+{
+  "title": "Discovery",
+  "style": {
+    "milestone_color": "#888888"
+  },
+  "tasks": [
+    {
+      "name": "Discovery",
+      "color": "#4472C4",
+      "tasks": [
+        {
+          "name": "Research",
+          "start": "2024-04-01",
+          "end": "2024-04-12",
+          "description": "Interview users and collect operating constraints."
+        },
+        {
+          "name": "Scope lock",
+          "milestone": true,
+          "date": ["2024-04-15", "2024-04-19"],
+          "description": "Two-stage checkpoint on one row."
+        }
+      ]
+    }
+  ]
+}

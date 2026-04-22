@@ -3,23 +3,31 @@ from __future__ import annotations
 
 import calendar
 import json
+import os
 import re
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .models import Arrow, ChartConfig, Style, Task
 
 
 def load_chart(path: str) -> ChartConfig:
     """Load and parse a Gantt JSON file, returning a :class:`ChartConfig`."""
-    with open(path, "r", encoding="utf-8") as fh:
+    resolved_path = os.path.abspath(path)
+    with open(resolved_path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
-    return parse_chart(data)
+    return parse_chart(data, source_path=resolved_path, _seen_files={resolved_path})
 
 
-def parse_chart(data: Dict[str, Any]) -> ChartConfig:
+def parse_chart(
+    data: Dict[str, Any],
+    source_path: Optional[str] = None,
+    _seen_files: Optional[Set[str]] = None,
+) -> ChartConfig:
     """Parse a raw JSON dict into a :class:`ChartConfig`."""
     date_format = data.get("dateformat", data.get("date_format", "%Y-%m-%d"))
+    source_dir = os.path.dirname(os.path.abspath(source_path)) if source_path else None
+    seen_files = set(_seen_files or set())
 
     start: Optional[datetime] = None
     end: Optional[datetime] = None
@@ -30,10 +38,13 @@ def parse_chart(data: Dict[str, Any]) -> ChartConfig:
 
     style = _parse_style(data.get("style", {}))
 
-    tasks = [
-        _parse_task(t, date_format, depth=0)
-        for t in _nested_task_items(data)
-    ]
+    tasks = _parse_task_entries(
+        _nested_task_items(data),
+        date_format,
+        depth=0,
+        source_dir=source_dir,
+        seen_files=seen_files,
+    )
 
     # Resolve not_before references now that all tasks are parsed
     all_tasks: List[Task] = []
@@ -88,6 +99,69 @@ def _nested_task_items(data: Dict[str, Any]) -> List[Any]:
     return items
 
 
+def _parse_task_entries(
+    items: List[Any],
+    date_format: str,
+    depth: int,
+    source_dir: Optional[str],
+    seen_files: Set[str],
+) -> List[Task]:
+    """Parse task items, expanding filename-only include entries inline."""
+    tasks: List[Task] = []
+    for item in items:
+        tasks.extend(_parse_task_entry(item, date_format, depth, source_dir, seen_files))
+    return tasks
+
+
+def _parse_task_entry(
+    data: Any,
+    date_format: str,
+    depth: int,
+    source_dir: Optional[str],
+    seen_files: Set[str],
+) -> List[Task]:
+    """Parse one task entry, optionally inlining tasks from another file."""
+    if isinstance(data, dict) and _is_filename_only_task_entry(data):
+        included_data, included_source_dir, branch_seen_files = _load_included_chart_data(
+            data["filename"],
+            source_dir,
+            seen_files,
+        )
+        included_date_format = included_data.get("dateformat", included_data.get("date_format", "%Y-%m-%d"))
+        return _parse_task_entries(
+            _nested_task_items(included_data),
+            included_date_format,
+            depth,
+            included_source_dir,
+            branch_seen_files,
+        )
+
+    return [_parse_task(data, date_format, depth, source_dir, seen_files)]
+
+
+def _is_filename_only_task_entry(data: Dict[str, Any]) -> bool:
+    """Return True when a task entry should inline the referenced file's tasks."""
+    return set(data.keys()) == {"filename"}
+
+
+def _load_included_chart_data(
+    filename: str,
+    source_dir: Optional[str],
+    seen_files: Set[str],
+) -> Tuple[Dict[str, Any], str, Set[str]]:
+    """Load a nested chart file used to compose tasks across files."""
+    resolved_path = filename if os.path.isabs(filename) else os.path.abspath(
+        os.path.join(source_dir or os.getcwd(), filename)
+    )
+    if resolved_path in seen_files:
+        raise ValueError(f"Circular filename reference detected: {resolved_path}")
+
+    with open(resolved_path, "r", encoding="utf-8") as fh:
+        included_data = json.load(fh)
+
+    return included_data, os.path.dirname(resolved_path), seen_files | {resolved_path}
+
+
 def _parse_style(data: Dict[str, Any]) -> Style:
     style = Style()
     mapping = {
@@ -103,8 +177,16 @@ def _parse_style(data: Dict[str, Any]) -> Style:
         "grid_color": "grid_color",
         "row_band_color": "row_band_color",
         "milestone_color": "milestone_color",
+        "milestone_edge_color": "milestone_edge_color",
         "milestone_marker": "milestone_marker",
         "milestone_size": "milestone_size",
+        "rollup_milestones": "rollup_milestones",
+        "rollup_major_milestones_only": "rollup_major_milestones_only",
+        "number_milestones": "number_milestones",
+        "major_milestone_color": "major_milestone_color",
+        "major_milestone_edge_color": "major_milestone_edge_color",
+        "major_milestone_marker": "major_milestone_marker",
+        "major_milestone_size": "major_milestone_size",
         "major_tick": "major_tick",
         "minor_tick": "minor_tick",
         "major_grid_width": "major_grid_width",
@@ -122,7 +204,13 @@ def _parse_style(data: Dict[str, Any]) -> Style:
     return style
 
 
-def _parse_task(data: Any, date_format: str, depth: int) -> Task:
+def _parse_task(
+    data: Any,
+    date_format: str,
+    depth: int,
+    source_dir: Optional[str],
+    seen_files: Set[str],
+) -> Task:
     """Recursively parse a task dict."""
     if isinstance(data, str):
         # shorthand: just a name string with no dates
@@ -132,7 +220,9 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
     description: str = str(data.get("description", ""))
     task_id: Optional[str] = data.get("id", None)
     color: Optional[str] = data.get("color", None)
-    milestone: bool = bool(data.get("milestone", False))
+    edge_color: Optional[str] = data.get("edge_color", None)
+    major_milestone: bool = bool(data.get("major_milestone", False))
+    milestone: bool = bool(data.get("milestone", False) or major_milestone)
     not_before: Optional[str] = data.get("not_before", None)
     marker_size: Optional[float] = float(data["marker_size"]) if "marker_size" in data else None
     marker: Optional[str] = str(data["marker"]) if "marker" in data else None
@@ -163,10 +253,33 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
             milestone_dates = [end]
             milestone_date = end
 
-    children: List[Task] = [
-        _parse_task(child, date_format, depth + 1)
-        for child in _nested_task_items(data)
-    ]
+    children: List[Task] = []
+    if "filename" in data:
+        included_data, included_source_dir, branch_seen_files = _load_included_chart_data(
+            data["filename"],
+            source_dir,
+            seen_files,
+        )
+        included_date_format = included_data.get("dateformat", included_data.get("date_format", "%Y-%m-%d"))
+        children.extend(
+            _parse_task_entries(
+                _nested_task_items(included_data),
+                included_date_format,
+                depth + 1,
+                included_source_dir,
+                branch_seen_files,
+            )
+        )
+
+    children.extend(
+        _parse_task_entries(
+            _nested_task_items(data),
+            date_format,
+            depth + 1,
+            source_dir,
+            seen_files,
+        )
+    )
 
     known_fields = {
         "name",
@@ -177,11 +290,14 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
         "duration",
         "not_before",
         "color",
+        "edge_color",
         "milestone",
+        "major_milestone",
         "date",
         "marker",
         "marker_size",
         "bold",
+        "filename",
         "tasks",
         "children",
     }
@@ -198,7 +314,9 @@ def _parse_task(data: Any, date_format: str, depth: int) -> Task:
         start=start,
         end=end,
         color=color,
+        edge_color=edge_color,
         milestone=milestone,
+        major_milestone=major_milestone,
         milestone_date=milestone_date,
         milestone_dates=milestone_dates,
         children=children,

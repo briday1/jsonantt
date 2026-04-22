@@ -54,7 +54,9 @@ class Task:
     start: Optional[date] = None
     end: Optional[date] = None
     color: Optional[str] = None
+    edge_color: Optional[str] = None
     milestone: bool = False
+    major_milestone: bool = False
     milestone_date: Optional[date] = None
     milestone_dates: List[date] = field(default_factory=list)
     children: List["Task"] = field(default_factory=list)
@@ -116,8 +118,16 @@ class Style:
     grid_color: str = "#E0E0E0"  # vertical gridline colour
     row_band_color: str = "#F5F5F5"  # alternating row band colour
     milestone_color: str = "#FFD700"  # default milestone colour
+    milestone_edge_color: Optional[str] = None  # default milestone outline colour
     milestone_marker: str = "D"       # default milestone marker symbol
     milestone_size: float = 14.0       # default milestone marker size (pts)
+    rollup_milestones: bool = False    # draw hidden descendant milestones on rolled-up ancestor bars
+    rollup_major_milestones_only: bool = False  # restrict milestone rollup overlays to major milestones
+    number_milestones: bool = False    # label milestones as M1, M2, ... in markers and tables
+    major_milestone_color: Optional[str] = None  # default major milestone fill colour
+    major_milestone_edge_color: Optional[str] = None  # default major milestone outline colour
+    major_milestone_marker: Optional[str] = None  # default major milestone marker symbol
+    major_milestone_size: Optional[float] = None  # default major milestone marker size (pts)
     major_tick: Optional[str] = None  # e.g. "year", "quarter", "month", "week"
     minor_tick: Optional[str] = None  # e.g. "quarter", "month", "week", "day"
     major_grid_width: float = 2.0     # major gridline linewidth

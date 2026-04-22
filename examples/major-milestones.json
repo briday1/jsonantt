@@ -1,0 +1,56 @@
+{
+  "title": "Major Milestone Rollup",
+  "style": {
+    "width": 13,
+    "major_tick": "month",
+    "minor_tick": "week",
+    "rollup_milestones": true,
+    "rollup_major_milestones_only": true,
+    "number_milestones": true,
+    "milestone_color": "#A5A5A5",
+    "milestone_edge_color": "#666666",
+    "milestone_marker": "D",
+    "major_milestone_color": "#C0504D",
+    "major_milestone_edge_color": "#7F3128",
+    "major_milestone_marker": "s",
+    "major_milestone_size": 18
+  },
+  "tasks": [
+    {
+      "name": "Program",
+      "color": "#4472C4",
+      "tasks": [
+        {
+          "name": "Delivery",
+          "tasks": [
+            {
+              "name": "Implementation",
+              "start": "2024-05-01",
+              "end": "2024-06-14"
+            },
+            {
+              "name": "Weekly Gate",
+              "milestone": true,
+              "date": ["2024-05-17", "2024-05-24", "2024-05-31"]
+            },
+            {
+              "name": "Executive Review",
+              "major_milestone": true,
+              "date": "2024-06-07"
+            },
+            {
+              "name": "Readiness Check",
+              "major_milestone": true,
+              "date": "2024-06-14"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Launch",
+      "major_milestone": true,
+      "date": "2024-06-21"
+    }
+  ]
+}

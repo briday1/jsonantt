@@ -12,8 +12,10 @@ Charts are rendered with [matplotlib](https://matplotlib.org/) so they can be sa
 ## Features
 
 - **Infinitely nestable tasks** — define sub-tasks, sub-sub-tasks, etc., using either `tasks` or legacy `children`.
+- **Composable task files** — import task trees from other JSON files with `filename`, either inline or nested under a wrapper task.
 - **Auto date computation** — parent task start/end are derived automatically from children when not specified.
 - **Milestone markers** — easy `"milestone": true` flag with chart-level defaults and per-milestone marker overrides, including milestone chains on one row via a `date` list.
+- **Major milestones, rollups, and numbering** — distinguish major milestones from regular milestones, optionally roll only major milestones up onto summary bars, add milestone edge colours, and label milestones as `M1`, `M2`, ... in markers and tables.
 - **Optional task descriptions and extra fields** — add long-form context per task, plus arbitrary metadata like assignee or cost for table output.
 - **Fully colourable** — set colours per-task; children inherit their parent's colour.
 - **Recursive child colour lightening** — inherited subtask colours can optionally lighten at each nested level.
@@ -191,17 +193,28 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 | `duration` | string or int | Duration from `start` (or resolved `not_before` end): `"14d"`, `"2w"`, `"3m"`, `"2y"`, or a plain integer (days) |
 | `not_before` | string | `id` of another task — this task starts immediately after that task ends |
 | `color` | CSS hex string | Bar colour, or milestone colour override for an individual milestone (e.g. `"#4472C4"`) |
+| `edge_color` | CSS hex string | Optional milestone outline colour override for an individual milestone |
 | `milestone` | boolean | Render as a diamond milestone instead of a bar |
+| `major_milestone` | boolean | Mark this milestone as a major milestone; it still behaves like a milestone but can use separate default styling and rollup rules |
 | `date` | date string or array of date strings | Milestone date, or a list of milestone dates to draw multiple markers on the same row when `milestone: true` |
 | `marker` | string | Milestone marker override for an individual milestone (matplotlib marker symbol such as `"D"`, `"o"`, `"s"`, `"*"`) |
 | `marker_size` | number | Override milestone diamond size in points |
 | `bold` | boolean | Render label in bold (top-level tasks are auto-bolded by default) |
+| `filename` | string | Path to another JSON file whose task tree should be imported at this location |
 | `tasks` | array | Nested sub-tasks (preferred key, infinitely nestable) |
 | `children` | array | Legacy alias for nested sub-tasks |
 
 > **Auto date computation:** When a task has `children` but no explicit `start`/`end`, the dates are computed automatically as the earliest child start and latest child end, recursively.
 
 > **Milestone chains:** When `milestone: true`, `date` may be either one date string or a list of date strings. A list draws multiple milestone markers on the same task row while keeping the same label, description, color, and marker settings.
+
+> **Milestone numbering:** When `style.number_milestones` is `true`, milestones are numbered `M1`, `M2`, ... in tree order. The marker keeps its configured shape and the `M` label is drawn inside it. Tables use the same `M` labels in the `Task` column instead of hierarchy numbers for milestone rows.
+
+> **Milestone rollup:** When `style.rollup_milestones` is `true` and deeper rows are hidden by `render_depth`, descendant milestones are not listed as separate rows. Instead their milestone markers are drawn on top of the visible ancestor bar they roll up into. This happens recursively, so deeply nested hidden milestones keep rolling up until they land on a visible row.
+
+> **Major milestone styling:** `major_milestone: true` implies `milestone: true`. Major milestones can have a separate default fill, edge colour, marker, and size through the `style.major_milestone_*` fields. Task-level `color`, `edge_color`, `marker`, and `marker_size` still override both milestone and major milestone defaults.
+
+> **Major-only rollup:** When both `style.rollup_milestones` and `style.rollup_major_milestones_only` are `true`, hidden regular milestones stay hidden while hidden major milestones roll up onto the visible ancestor bar.
 
 ```json
 {
@@ -217,6 +230,11 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
           "date": ["2024-06-01", "2024-06-15", "2024-07-01"],
           "marker": "D",
           "color": "#C0504D"
+        },
+        {
+          "name": "Executive Approval",
+          "major_milestone": true,
+          "date": "2024-07-08"
         }
       ]
     }
@@ -225,6 +243,21 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 ```
 
 `tasks` and `children` are interchangeable at both the chart root and inside nested task objects. If both are present on the same object, jsonantt reads both lists in order.
+
+`filename` lets you build a larger plan from smaller task files. A task entry that is only `{ "filename": "phase.json" }` inlines the referenced file's tasks at that position. When `filename` appears alongside normal task fields like `name` or `description`, the referenced file's tasks are imported as that task's children. The included file's `style`, `title`, chart `start`/`end`, and `arrows` are ignored during inclusion; only its task tree is used.
+
+```json
+{
+  "title": "Combined Plan",
+  "tasks": [
+    { "filename": "composed-discovery.json" },
+    {
+      "name": "Delivery Program",
+      "filename": "composed-delivery.json"
+    }
+  ]
+}
+```
 
 > **Duration formats:** `d`/`day`/`days`, `w`/`week`/`weeks`, `m`/`month`/`months`, `y`/`year`/`years` — e.g. `"14d"`, `"2w"`, `"3m"`, `"1y"`.
 
@@ -244,8 +277,16 @@ Use `--date-line` to draw a single vertical reference line on chart outputs. It 
 | `grid_color` | `"#E0E0E0"` | Vertical gridline colour |
 | `row_band_color` | `"#F5F5F5"` | Alternating row band colour |
 | `milestone_color` | `"#FFD700"` | Default milestone colour |
+| `milestone_edge_color` | `null` | Optional default milestone outline colour |
 | `milestone_marker` | `"D"` | Default milestone marker symbol |
 | `milestone_size` | `14` | Default milestone marker size in points |
+| `rollup_milestones` | `false` | When rows are hidden by `render_depth`, draw descendant milestone markers on the visible ancestor bar instead of dropping them |
+| `rollup_major_milestones_only` | `false` | When milestone rollup is enabled, restrict rolled-up overlays to hidden major milestones |
+| `number_milestones` | `false` | Number milestones as `M1`, `M2`, ... inside their markers and in table `Task` cells |
+| `major_milestone_color` | `null` | Optional default fill colour for major milestones |
+| `major_milestone_edge_color` | `null` | Optional default outline colour for major milestones |
+| `major_milestone_marker` | `null` | Optional default marker symbol for major milestones |
+| `major_milestone_size` | `null` | Optional default marker size in points for major milestones |
 | `major_tick` | `null` | Major tick unit: `"year"`, `"quarter"`, `"month"`, `"week"` |
 | `minor_tick` | `null` | Minor tick unit: `"quarter"`, `"month"`, `"week"`, `"day"` |
 | `major_grid_width` | `2.0` | Major gridline linewidth |
@@ -292,6 +333,14 @@ Top level only, `-r 1`:
 ### Chained milestones
 
 [examples/chained-milestones.json](https://github.com/briday1/jsonantt/blob/main/examples/chained-milestones.json) — nested `tasks` with multiple milestone dates on one row
+
+### Composed plans
+
+[examples/composed-plan.json](https://github.com/briday1/jsonantt/blob/main/examples/composed-plan.json) — combines multiple task files with `filename`, including nested chained milestones
+
+### Major milestone rollup
+
+[examples/major-milestones.json](https://github.com/briday1/jsonantt/blob/main/examples/major-milestones.json) — distinguishes regular vs major milestones, numbers them, and rolls up only hidden major milestones
 
 ![render depth top](https://raw.githubusercontent.com/briday1/jsonantt/main/examples/renderdepth-top.png)
 

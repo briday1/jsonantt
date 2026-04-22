@@ -1,0 +1,22 @@
+{
+  "title": "Composed Delivery Plan",
+  "dateformat": "%Y-%m-%d",
+  "style": {
+    "width": 13,
+    "major_tick": "month",
+    "minor_tick": "week"
+  },
+  "tasks": [
+    { "filename": "composed-discovery.json" },
+    {
+      "name": "Delivery Program",
+      "description": "Wrapper task that imports another file as nested work.",
+      "filename": "composed-delivery.json"
+    },
+    {
+      "name": "Launch",
+      "milestone": true,
+      "date": ["2024-06-14", "2024-06-21"]
+    }
+  ]
+}

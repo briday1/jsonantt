@@ -1,0 +1,27 @@
+{
+  "title": "Delivery",
+  "tasks": [
+    {
+      "name": "Implementation",
+      "color": "#70AD47",
+      "tasks": [
+        {
+          "name": "Backend",
+          "start": "2024-04-22",
+          "end": "2024-05-24"
+        },
+        {
+          "name": "Frontend",
+          "start": "2024-04-29",
+          "end": "2024-05-31"
+        },
+        {
+          "name": "Release gates",
+          "milestone": true,
+          "date": ["2024-05-17", "2024-05-31", "2024-06-07"],
+          "description": "Nested imported milestone chain."
+        }
+      ]
+    }
+  ]
+}
