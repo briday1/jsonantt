@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import date, datetime
+from pathlib import Path
 import sys
 
 from jsonantt.parser import load_chart
@@ -16,11 +17,51 @@ def _parse_cli_date(value: str, date_format: str) -> date:
     return datetime.strptime(value, date_format).date()
 
 
+def _run_fmt(argv) -> int:
+    """Handle ``jsonantt fmt`` — reformat a chart file with the canonical formatter."""
+    parser = argparse.ArgumentParser(
+        prog="jsonantt fmt",
+        description=(
+            "Format a JSON chart file using jsonantt's canonical formatter "
+            "(2-space indent, trailing newline). The studio uses the same formatter, "
+            "so output is identical either way."
+        ),
+    )
+    parser.add_argument("input", nargs="?", help="JSON chart file to format (omit or use '-' for stdin)")
+    parser.add_argument("-o", "--output", help="Output path (default: overwrite the input in place, or stdout for stdin)")
+    args = parser.parse_args(argv)
+
+    from jsonantt.formatter import format_json_text
+
+    try:
+        if not args.input or args.input == "-":
+            text = sys.stdin.read()
+        else:
+            text = Path(args.input).read_text(encoding="utf-8")
+        formatted = format_json_text(text)
+    except FileNotFoundError:
+        print(f"error: input file not found: {args.input}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"error: failed to format {args.input or 'stdin'}: {exc}", file=sys.stderr)
+        return 1
+
+    if args.output:
+        Path(args.output).write_text(formatted, encoding="utf-8")
+        print(f"Formatted JSON saved to {args.output}")
+    elif args.input and args.input != "-":
+        Path(args.input).write_text(formatted, encoding="utf-8")
+        print(f"Formatted {args.input} in place")
+    else:
+        sys.stdout.write(formatted)
+    return 0
+
+
 def _run_serve(argv) -> int:
     """Handle ``jsonantt serve`` — launch the local studio web app."""
     parser = argparse.ArgumentParser(
         prog="jsonantt serve",
-        description="Serve the jsonantt studio (source editor + live Gantt/Graph canvas) locally.",
+        description="Serve the jsonantt studio (source editor + live Gantt/Table canvas) locally.",
     )
     parser.add_argument("input", nargs="?", help="Optional JSON chart file to open in the studio")
     parser.add_argument("--host", default="127.0.0.1", help="Host interface to bind (default: 127.0.0.1)")
@@ -53,6 +94,8 @@ def main(argv=None) -> int:
         argv = sys.argv[1:]
     if argv and argv[0] == "serve":
         return _run_serve(argv[1:])
+    if argv and argv[0] == "fmt":
+        return _run_fmt(argv[1:])
 
     parser = argparse.ArgumentParser(
         prog="jsonantt",

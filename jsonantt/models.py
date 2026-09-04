@@ -130,6 +130,7 @@ class Style:
     major_milestone_size: Optional[float] = None  # default major milestone marker size (pts)
     major_tick: Optional[str] = None  # e.g. "year", "quarter", "month", "week"
     minor_tick: Optional[str] = None  # e.g. "quarter", "month", "week", "day"
+    fiscal_year_start: Optional[str] = None  # fiscal year start, e.g. "10-01" (month-day); null = calendar year
     major_grid_width: float = 2.0     # major gridline linewidth
     minor_grid_width: float = 1.5     # minor gridline linewidth
     bold_tasks: bool = True           # auto-bold top-level (depth 0) tasks
