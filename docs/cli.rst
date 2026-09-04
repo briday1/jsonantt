@@ -38,6 +38,8 @@ Quick reference
      - Burn matrix table
    * - ``jsonantt -t in.json out.png --milestones-only``
      - Milestone-only table
+   * - ``jsonantt fmt in.json``
+     - Reformat a chart file with the canonical formatter (2-space indent, trailing newline)
    * - ``jsonantt serve in.json``
      - Open the interactive studio (see :doc:`studio`)
 
@@ -118,6 +120,20 @@ Burn table
 
    jsonantt project.json burn.csv --burn-table \
      --burn-field cost --burn-period month --burn-group 0
+
+Formatting
+----------
+
+.. code-block:: bash
+
+   jsonantt fmt project.json            # reformat in place
+   jsonantt fmt project.json -o out.json
+   cat project.json | jsonantt fmt      # read stdin, write stdout
+
+``jsonantt fmt`` runs the canonical jsonantt formatter: 2-space indentation, a trailing
+newline, preserved key order, and non-ASCII text kept as-is. The studio's *Format JSON*
+button uses the same implementation (served over ``/api/format``), so both paths produce
+byte-for-byte identical files.
 
 Option reference
 ----------------

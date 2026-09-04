@@ -37,9 +37,31 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
             return self._send_text(self.server.project_json, "application/json; charset=utf-8")
         return super().do_GET()
 
-    def _send_text(self, value: str, content_type: str) -> None:
+    def do_POST(self):  # noqa: N802 - required by BaseHTTPRequestHandler
+        path = urlsplit(self.path).path
+        if path == "/api/format":
+            return self._handle_format()
+        self.send_error(404, "Not Found")
+
+    def _handle_format(self) -> None:
+        """Format the request body with the canonical (CLI-identical) formatter."""
+        from .formatter import format_json_text
+
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        body = self.rfile.read(max(0, length))
+        try:
+            formatted = format_json_text(body.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError) as exc:
+            payload = json.dumps({"error": str(exc)})
+            return self._send_text(payload, "application/json; charset=utf-8", status=400)
+        self._send_text(formatted, "application/json; charset=utf-8")
+
+    def _send_text(self, value: str, content_type: str, status: int = 200) -> None:
         payload = value.encode("utf-8")
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()

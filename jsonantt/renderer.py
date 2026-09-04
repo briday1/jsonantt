@@ -1272,8 +1272,9 @@ def render_chart(
         elif span_days_raw > 21:
             minor_key = "week"
     if minor_key:
-        x_start = _snap_to_tick_start(x_start, minor_key)
-        x_end = _snap_to_tick_end(x_end, minor_key)
+        fiscal_start = _fiscal_style_start(config.style)
+        x_start = _snap_to_tick_start(x_start, minor_key, fiscal_start)
+        x_end = _snap_to_tick_end(x_end, minor_key, fiscal_start)
 
     # convert to datetime so matplotlib locators can call .replace(hour=0, ...)
     if not isinstance(x_start, datetime):
@@ -1526,8 +1527,9 @@ def render_compare_chart(
         elif span_days_raw > 21:
             minor_key = "week"
     if minor_key:
-        x_start = _snap_to_tick_start(x_start, minor_key)
-        x_end = _snap_to_tick_end(x_end, minor_key)
+        fiscal_start = _fiscal_style_start(style)
+        x_start = _snap_to_tick_start(x_start, minor_key, fiscal_start)
+        x_end = _snap_to_tick_end(x_end, minor_key, fiscal_start)
 
     if not isinstance(x_start, datetime):
         x_start = datetime(x_start.year, x_start.month, x_start.day)
@@ -1711,12 +1713,100 @@ def render_compare_table(
     plt.close(fig)
 
 
-def _snap_to_tick_start(d: date, key: str) -> date:
+_FISCAL_YEAR_START_RE = re.compile(r"^\s*(\d{1,2})(?:-(\d{1,2}))?\s*$")
+
+
+def _parse_fiscal_year_start(spec: Any) -> Tuple[int, int]:
+    """Validate a fiscal-year start spec and return ``(month, day)``.
+
+    Accepts ``"MM"`` or ``"MM-DD"`` (for example ``"10"`` or ``"10-01"`` for a
+    fiscal year starting 1 October). Raises :class:`ValueError` on bad input.
+    """
+    if not isinstance(spec, str):
+        raise ValueError(
+            f"Invalid fiscal_year_start {spec!r}. Use a 'MM' or 'MM-DD' string such as '10-01'."
+        )
+    match = _FISCAL_YEAR_START_RE.match(spec)
+    if not match:
+        raise ValueError(
+            f"Invalid fiscal_year_start {spec!r}. Use a 'MM' or 'MM-DD' string such as '10-01'."
+        )
+    month = int(match.group(1))
+    day = int(match.group(2)) if match.group(2) is not None else 1
+    if not 1 <= month <= 12:
+        raise ValueError(
+            f"Invalid fiscal_year_start {spec!r}. Month must be between 1 and 12."
+        )
+    try:
+        date(2000, month, day)  # 2000 is a leap year, so 02-29 stays valid
+    except ValueError as exc:
+        raise ValueError(f"Invalid fiscal_year_start {spec!r}: {exc}") from exc
+    return (month, day)
+
+
+def _fiscal_anchor(year: int, fiscal_start: Tuple[int, int]) -> date:
+    """Return the fiscal-year start date in calendar *year* (clamped for Feb-29)."""
+    month, day = fiscal_start
+    max_day = calendar_monthrange(year, month)
+    return date(year, month, min(day, max_day))
+
+
+def calendar_monthrange(year: int, month: int) -> int:
+    """Return the number of days in *month* of *year*."""
+    if month == 12:
+        return 31
+    return (date(year, month + 1, 1) - date(year, month, 1)).days
+
+
+def _as_date(d: date) -> date:
+    """Return *d* as a plain :class:`datetime.date` (datetimes are truncated)."""
+    return d.date() if isinstance(d, datetime) else d
+
+
+def _fiscal_year_info(d: date, fiscal_start: Tuple[int, int]) -> Tuple[int, date]:
+    """Return ``(fiscal_year, fiscal_year_start_date)`` for *d*.
+
+    The fiscal year is named after the calendar year in which it ends, so with
+    a ``10-01`` start, 2024-10-01 … 2025-09-30 is fiscal year 2025.
+    """
+    d = _as_date(d)
+    anchor = _fiscal_anchor(d.year, fiscal_start)
+    if d >= anchor:
+        return d.year + 1, anchor
+    return d.year, _fiscal_anchor(d.year - 1, fiscal_start)
+
+
+def _fiscal_quarter_info(d: date, fiscal_start: Tuple[int, int]) -> Tuple[int, int, date]:
+    """Return ``(fiscal_year, fiscal_quarter, quarter_start_date)`` for *d*."""
+    d = _as_date(d)
+    fiscal_year, anchor = _fiscal_year_info(d, fiscal_start)
+    months_since = (d.year - anchor.year) * 12 + (d.month - anchor.month)
+    quarter_index = max(0, min(3, months_since // 3))
+    month_index = (anchor.month - 1) + quarter_index * 3
+    start_year = anchor.year + month_index // 12
+    start_month = month_index % 12 + 1
+    quarter_start = date(start_year, start_month, min(anchor.day, calendar_monthrange(start_year, start_month)))
+    return fiscal_year, quarter_index + 1, quarter_start
+
+
+def _next_fiscal_quarter_start(start: date, fiscal_start: Tuple[int, int]) -> date:
+    """Return the first fiscal quarter start strictly after *start*."""
+    month_index = (start.month - 1) + 3
+    year = start.year + month_index // 12
+    month = month_index % 12 + 1
+    return date(year, month, min(start.day, calendar_monthrange(year, month)))
+
+
+def _snap_to_tick_start(d: date, key: str, fiscal_start: Optional[Tuple[int, int]] = None) -> date:
     """Snap *d* back to the start of the enclosing tick period."""
     k = key.strip().lower()
     if k in ("year", "years"):
+        if fiscal_start:
+            return _fiscal_year_info(d, fiscal_start)[1]
         return date(d.year, 1, 1)
     elif k in ("quarter", "quarters"):
+        if fiscal_start:
+            return _fiscal_quarter_info(d, fiscal_start)[2]
         q_start_month = ((d.month - 1) // 3) * 3 + 1
         return date(d.year, q_start_month, 1)
     elif k in ("month", "months"):
@@ -1727,15 +1817,19 @@ def _snap_to_tick_start(d: date, key: str) -> date:
         return d
 
 
-def _snap_to_tick_end(d: date, key: str) -> date:
+def _snap_to_tick_end(d: date, key: str, fiscal_start: Optional[Tuple[int, int]] = None) -> date:
     """Snap *d* forward to the start of the next tick period (covers the date)."""
-    start = _snap_to_tick_start(d, key)
+    start = _snap_to_tick_start(d, key, fiscal_start)
     if start >= d:
         return d  # already on a boundary
     k = key.strip().lower()
     if k in ("year", "years"):
+        if fiscal_start:
+            return _fiscal_anchor(start.year + 1, fiscal_start)
         return date(d.year + 1, 1, 1)
     elif k in ("quarter", "quarters"):
+        if fiscal_start:
+            return _next_fiscal_quarter_start(start, fiscal_start)
         q_start_month = ((d.month - 1) // 3) * 3 + 1
         next_month = q_start_month + 3
         if next_month > 12:
@@ -1751,11 +1845,11 @@ def _snap_to_tick_end(d: date, key: str) -> date:
         return d
 
 
-def _iter_ticks(x_start: datetime, x_end: datetime, key: str):
+def _iter_ticks(x_start: datetime, x_end: datetime, key: str, fiscal_start: Optional[Tuple[int, int]] = None):
     """Yield datetime positions from x_start to x_end for the given tick key."""
     k = key.strip().lower()
     # start at the first tick on or before x_start
-    d = _snap_to_tick_start(x_start, key)
+    d = _snap_to_tick_start(x_start, key, fiscal_start)
     if not isinstance(d, datetime):
         d = datetime(d.year, d.month, d.day)
     end = x_end if isinstance(x_end, datetime) else datetime(x_end.year, x_end.month, x_end.day)
@@ -1763,12 +1857,20 @@ def _iter_ticks(x_start: datetime, x_end: datetime, key: str):
     while d <= end:
         yield d
         if k in ("year", "years"):
-            d = datetime(d.year + 1, 1, 1)
+            if fiscal_start:
+                anchor = _fiscal_anchor(d.year + 1, fiscal_start)
+                d = datetime(anchor.year, anchor.month, anchor.day)
+            else:
+                d = datetime(d.year + 1, 1, 1)
         elif k in ("quarter", "quarters"):
-            m = d.month + 3
-            y = d.year + (m - 1) // 12
-            m = (m - 1) % 12 + 1
-            d = datetime(y, m, 1)
+            if fiscal_start:
+                nxt = _next_fiscal_quarter_start(d.date(), fiscal_start)
+                d = datetime(nxt.year, nxt.month, nxt.day)
+            else:
+                m = d.month + 3
+                y = d.year + (m - 1) // 12
+                m = (m - 1) % 12 + 1
+                d = datetime(y, m, 1)
         elif k in ("month", "months"):
             m = d.month + 1
             y = d.year + (m - 1) // 12
@@ -2104,9 +2206,10 @@ def _style_bar_axis(ax, x_start, x_end, y_min, y_max, style: Style, n: int) -> N
     # ---- resolve major / minor keys, defaulting to year / quarter ----------
     major_key = style.major_tick or "year"
     minor_key = style.minor_tick or "quarter"
+    fiscal_start = _fiscal_style_start(style)
 
-    major_loc, major_fmt = _tick_locator_fmt(major_key, span_days)
-    minor_loc, _         = _tick_locator_fmt(minor_key, span_days)
+    major_loc, major_fmt = _tick_locator_fmt(major_key, span_days, fiscal_start)
+    minor_loc, _         = _tick_locator_fmt(minor_key, span_days, fiscal_start)
 
     ax.xaxis.set_major_locator(major_loc)
     ax.xaxis.set_major_formatter(major_fmt)
@@ -2137,11 +2240,11 @@ def _style_bar_axis(ax, x_start, x_end, y_min, y_max, style: Style, n: int) -> N
     ax.spines["bottom"].set_color(style.grid_color)
 
     # ---- draw gridlines by iterating dates directly -----------------------
-    for dt in _iter_ticks(x_start, x_end, major_key):
+    for dt in _iter_ticks(x_start, x_end, major_key, fiscal_start):
         ax.axvline(mdates.date2num(dt), color=style.grid_color,
                    linewidth=style.major_grid_width, linestyle="-", zorder=1)
 
-    for dt in _iter_ticks(x_start, x_end, minor_key):
+    for dt in _iter_ticks(x_start, x_end, minor_key, fiscal_start):
         ax.axvline(mdates.date2num(dt), color=style.grid_color,
                    linewidth=style.minor_grid_width, linestyle=":", zorder=1)
 
@@ -2161,12 +2264,34 @@ def _draw_date_line(ax_bar, line_date: Optional[date], line_color: str) -> None:
     )
 
 
-def _tick_locator_fmt(key: str, span_days: int):
-    """Return (locator, formatter) for a tick key string."""
+def _fiscal_style_start(style: Style) -> Optional[Tuple[int, int]]:
+    """Return the validated ``(month, day)`` fiscal-year start from *style*, if any."""
+    if not style.fiscal_year_start:
+        return None
+    return _parse_fiscal_year_start(style.fiscal_year_start)
+
+
+def _tick_locator_fmt(key: str, span_days: int, fiscal_start: Optional[Tuple[int, int]] = None):
+    """Return (locator, formatter) for a tick key string.
+
+    When *fiscal_start* is given, year and quarter ticks land on the fiscal
+    calendar and are labelled ``FY<yy>`` / ``Q<n> FY<yy>`` (the fiscal year is
+    named after the calendar year in which it ends).
+    """
     k = key.strip().lower()
     if k in ("year", "years"):
+        if fiscal_start:
+            def _fyfmt(x, pos=None):
+                return f"FY{_fiscal_year_info(mdates.num2date(x).date(), fiscal_start)[0] % 100:02d}"
+            return _FiscalYearLocator(fiscal_start), ticker.FuncFormatter(_fyfmt)
         return mdates.YearLocator(), mdates.DateFormatter("%Y")
     elif k in ("quarter", "quarters"):
+        if fiscal_start:
+            def _fqfmt(x, pos=None):
+                fy, quarter, _ = _fiscal_quarter_info(mdates.num2date(x).date(), fiscal_start)
+                return f"Q{quarter} FY{fy % 100:02d}"
+            return _FiscalQuarterLocator(fiscal_start), ticker.FuncFormatter(_fqfmt)
+
         def _qfmt(x, pos=None):
             d = mdates.num2date(x)
             q = (d.month - 1) // 3 + 1
@@ -2180,6 +2305,43 @@ def _tick_locator_fmt(key: str, span_days: int):
         return mdates.DayLocator(), mdates.DateFormatter("%b %d")
     else:
         raise ValueError(f"Unknown tick spec {key!r}. Use: year, quarter, month, week, day")
+
+
+class _FiscalYearLocator(ticker.Locator):
+    """Matplotlib locator emitting one tick per fiscal-year start."""
+
+    def __init__(self, fiscal_start: Tuple[int, int]):
+        self._fiscal_start = fiscal_start
+
+    def __call__(self):
+        vmin, vmax = self.axis.get_view_interval()
+        return self.tick_values(vmin, vmax)
+
+    def tick_values(self, vmin, vmax):
+        start = _snap_to_tick_start(mdates.num2date(vmin).date(), "year", self._fiscal_start)
+        end = mdates.num2date(vmax).date()
+        ticks = [mdates.date2num(tick) for tick in _iter_ticks(
+            datetime(start.year, start.month, start.day),
+            datetime(end.year, end.month, end.day),
+            "year",
+            self._fiscal_start,
+        )]
+        return self.raise_if_exceeds(ticks)
+
+
+class _FiscalQuarterLocator(_FiscalYearLocator):
+    """Matplotlib locator emitting one tick per fiscal-quarter start."""
+
+    def tick_values(self, vmin, vmax):
+        start = _snap_to_tick_start(mdates.num2date(vmin).date(), "quarter", self._fiscal_start)
+        end = mdates.num2date(vmax).date()
+        ticks = [mdates.date2num(tick) for tick in _iter_ticks(
+            datetime(start.year, start.month, start.day),
+            datetime(end.year, end.month, end.day),
+            "quarter",
+            self._fiscal_start,
+        )]
+        return self.raise_if_exceeds(ticks)
 
 
 # ---------------------------------------------------------------------------

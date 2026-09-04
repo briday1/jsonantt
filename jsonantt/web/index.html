@@ -51,6 +51,8 @@
         <details class="toolbar-menu settings-menu">
           <summary>Settings</summary>
           <div class="toolbar-popover">
+            <button id="chart-settings" type="button">Chart settings…</button>
+            <span class="menu-separator"></span>
             <button class="theme-toggle" id="theme" type="button" aria-label="Toggle light and dark theme" title="Theme follows your system until toggled">
               <span class="theme-sun" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"></path></svg></span>
               <span class="theme-moon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5 8.5 8.5 0 1 0 20.5 14.1Z"></path></svg></span>
@@ -71,12 +73,9 @@
     <main>
       <aside id="source-panel" aria-label="Chart source">
         <div class="panel-title"><h1>Chart source</h1></div>
-        <div class="source-tabs" role="tablist" aria-label="Source documents">
-          <button class="active" data-source-tab="json" role="tab" aria-selected="true">JSON</button>
-          <button data-source-tab="style" role="tab" aria-selected="false">STYLE</button>
-        </div>
         <div class="editor-shell">
           <div class="line-numbers" id="line-numbers" aria-hidden="true"></div>
+          <pre class="highlight-layer" id="highlight-layer" aria-hidden="true"><code id="highlight-code"></code></pre>
           <textarea id="source" aria-label="Chart source" aria-describedby="editor-hint" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
         </div>
         <div class="editor-hint" id="editor-hint">
@@ -93,7 +92,7 @@
         <div class="preview-title">
           <div class="canvas-tabs" role="tablist" aria-label="Canvas views">
             <button class="active" data-canvas-tab="gantt" role="tab" aria-selected="true">Gantt</button>
-            <button data-canvas-tab="graph" role="tab" aria-selected="false">Graph</button>
+            <button data-canvas-tab="table" role="tab" aria-selected="false">Table</button>
           </div>
           <div class="preview-meta">
             <span id="chart-summary"></span>
@@ -148,6 +147,14 @@
         </details>
       </aside>
     </main>
+
+    <dialog id="settings-dialog" aria-label="Chart settings">
+      <div class="settings-dialog-header">
+        <h2>Chart settings</h2>
+        <button id="close-settings" type="button" aria-label="Close settings">✕</button>
+      </div>
+      <div id="settings-content" class="settings-content"></div>
+    </dialog>
 
     <script type="module" src="app.mjs"></script>
   </body>

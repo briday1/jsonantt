@@ -189,6 +189,7 @@ def _parse_style(data: Dict[str, Any]) -> Style:
         "major_milestone_size": "major_milestone_size",
         "major_tick": "major_tick",
         "minor_tick": "minor_tick",
+        "fiscal_year_start": "fiscal_year_start",
         "major_grid_width": "major_grid_width",
         "minor_grid_width": "minor_grid_width",
         "bold_tasks": "bold_tasks",
