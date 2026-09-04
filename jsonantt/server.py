@@ -18,6 +18,16 @@ _EXPORT_CONTENT_TYPES = {
     "csv": "text/csv",
 }
 
+# Fixed, hardcoded output filenames for every valid (mode, format) combination.
+# Using a literal allow-list (rather than interpolating the request's mode/format
+# strings directly) keeps the on-disk export path and the Content-Disposition
+# header free of any request-controlled data.
+_EXPORT_FILENAMES = {
+    (mode, fmt): f"{mode}.{fmt}"
+    for mode in ("gantt", "table", "burn", "burn-table")
+    for fmt in ("png", "svg", "csv")
+}
+
 
 class StudioRequestHandler(SimpleHTTPRequestHandler):
     """Serve the packaged studio assets plus a small health endpoint."""
@@ -78,6 +88,7 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
             return self._send_json_error(
                 ".csv export is only supported for table output", 400
             )
+        filename = _EXPORT_FILENAMES[(mode, fmt)]
 
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -91,7 +102,7 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
             return self._send_json_error(f"invalid chart JSON: {exc}", 400)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            output_path = str(Path(tmp_dir) / f"export.{fmt}")
+            output_path = str(Path(tmp_dir) / filename)
             try:
                 if mode == "table":
                     render_table(config, output_path, dpi=dpi)
@@ -108,7 +119,7 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
 
         self.send_response(200)
         self.send_header("Content-Type", _EXPORT_CONTENT_TYPES[fmt])
-        self.send_header("Content-Disposition", f'attachment; filename="{mode}.{fmt}"')
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
