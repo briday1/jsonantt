@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Edit jsonantt JSON project files and preview live Gantt and graph views." />
+    <link rel="icon" href="data:," />
+    <title>jsonantt studio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-toolbar">
+      <details class="toolbar-menu about-menu">
+        <summary>jsonantt</summary>
+        <div class="toolbar-popover">
+          <strong>ABOUT</strong>
+          <p class="about-version">Version <span id="app-version">—</span></p>
+          <span class="menu-separator"></span>
+          <a href="https://github.com/briday1/jsonantt" target="_blank" rel="noopener">Git repository</a>
+          <a href="https://pypi.org/project/jsonantt/" target="_blank" rel="noopener">PyPI package</a>
+          <a href="https://jsonantt.readthedocs.io/en/latest/" target="_blank" rel="noopener">Open documentation</a>
+        </div>
+      </details>
+      <nav class="global-actions" aria-label="Application menu">
+        <details class="toolbar-menu file-menu">
+          <summary>File</summary>
+          <div class="toolbar-popover">
+            <strong>SOURCE</strong>
+            <button id="new-chart" type="button">New chart</button>
+            <button id="load-source" type="button">Open JSON…</button>
+            <button id="save-source" type="button">Save JSON…</button>
+            <span class="menu-separator"></span>
+            <strong>CANVAS</strong>
+            <button id="copy-svg" type="button">Copy SVG</button>
+            <button id="save-svg" type="button">Save SVG…</button>
+          </div>
+        </details>
+        <details class="toolbar-menu new-menu">
+          <summary>New</summary>
+          <div class="toolbar-popover">
+            <button id="add-task" type="button">Task</button>
+            <button id="add-subtask" type="button">Subtask of selection</button>
+            <button id="add-milestone" type="button">Milestone</button>
+            <button id="add-arrow" type="button">Dependency arrow</button>
+          </div>
+        </details>
+        <details class="toolbar-menu examples-menu">
+          <summary>Examples</summary>
+          <div class="toolbar-popover" id="examples-popover"></div>
+        </details>
+        <details class="toolbar-menu settings-menu">
+          <summary>Settings</summary>
+          <div class="toolbar-popover">
+            <button class="theme-toggle" id="theme" type="button" aria-label="Toggle light and dark theme" title="Theme follows your system until toggled">
+              <span class="theme-sun" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"></path></svg></span>
+              <span class="theme-moon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5 8.5 8.5 0 1 0 20.5 14.1Z"></path></svg></span>
+              <span>Theme</span><small id="theme-value">System</small>
+            </button>
+            <label class="menu-setting"><span>Show dependency arrows</span><input id="toggle-arrows" type="checkbox" role="switch" checked /></label>
+            <label class="menu-setting"><span>Today marker</span><input id="toggle-today" type="checkbox" role="switch" /></label>
+          </div>
+        </details>
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <button class="icon-tool" id="undo-source" type="button" aria-label="Undo" title="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5"></path><path d="M5 12h8a6 6 0 0 1 6 6"></path></svg></button>
+        <button class="icon-tool" id="redo-source" type="button" aria-label="Redo" title="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 5 5-5 5"></path><path d="M19 12h-8a6 6 0 0 0-6 6"></path></svg></button>
+        <button class="icon-tool" id="format-source" type="button" aria-label="Format JSON" title="Re-indent the JSON source"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h13"></path></svg></button>
+      </nav>
+      <input id="source-file" type="file" accept=".json,application/json" hidden />
+    </header>
+
+    <main>
+      <aside id="source-panel" aria-label="Chart source">
+        <div class="panel-title"><h1>Chart source</h1></div>
+        <div class="source-tabs" role="tablist" aria-label="Source documents">
+          <button class="active" data-source-tab="json" role="tab" aria-selected="true">JSON</button>
+          <button data-source-tab="style" role="tab" aria-selected="false">STYLE</button>
+        </div>
+        <div class="editor-shell">
+          <div class="line-numbers" id="line-numbers" aria-hidden="true"></div>
+          <textarea id="source" aria-label="Chart source" aria-describedby="editor-hint" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
+        </div>
+        <div class="editor-hint" id="editor-hint">
+          <p class="status" id="status" role="status"></p>
+          <span class="editor-hint-actions"><span><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo</span></span>
+        </div>
+      </aside>
+
+      <button class="source-toggle panel-toggle" id="toggle-source" type="button" aria-controls="source-panel" aria-expanded="true" aria-label="Hide source panel" title="Hide source panel"><span class="toggle-arrow" aria-hidden="true">‹</span><span class="toggle-label">Source</span></button>
+
+      <div class="panel-resizer" id="panel-resizer" role="separator" aria-label="Resize source panel" aria-controls="source-panel" aria-orientation="vertical" tabindex="0"></div>
+
+      <section class="preview" aria-label="Chart canvas">
+        <div class="preview-title">
+          <div class="canvas-tabs" role="tablist" aria-label="Canvas views">
+            <button class="active" data-canvas-tab="gantt" role="tab" aria-selected="true">Gantt</button>
+            <button data-canvas-tab="graph" role="tab" aria-selected="false">Graph</button>
+          </div>
+          <div class="preview-meta">
+            <span id="chart-summary"></span>
+            <div class="zoom-controls canvas-zoom-controls" aria-label="Canvas zoom">
+              <button id="zoom-out" type="button" title="Zoom out">−</button>
+              <select id="canvas-zoom" aria-label="Canvas zoom">
+                <option value="50">50%</option>
+                <option value="75">75%</option>
+                <option value="100" selected>100%</option>
+                <option value="125">125%</option>
+                <option value="150">150%</option>
+                <option value="200">200%</option>
+              </select>
+              <button id="zoom-in" type="button" title="Zoom in">+</button>
+              <button id="zoom-fit" type="button">Fit</button>
+            </div>
+          </div>
+        </div>
+        <div class="canvas-shell" tabindex="0" title="Click an element to select it; Ctrl/⌘ + mouse wheel to zoom">
+          <div id="canvas"></div>
+          <div class="canvas-toast" id="canvas-toast" role="status" aria-live="polite"></div>
+          <section class="canvas-inspector" id="canvas-inspector" hidden aria-label="Properties">
+            <div class="inspector-drag-handle">Properties</div>
+            <div id="inspector-content"></div>
+            <div class="inspector-footer">
+              <div class="inspector-footer-row">
+                <button id="delete-selection" class="danger" type="button">Delete</button>
+                <button id="close-inspector" type="button">Close</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <div class="graph-panel-resizer" id="graph-panel-resizer" role="separator" aria-label="Resize objects panel" aria-controls="layers-panel" aria-orientation="vertical" tabindex="0"></div>
+
+      <button class="layers-toggle panel-toggle" id="toggle-layers" type="button" aria-controls="layers-panel" aria-expanded="true" aria-label="Hide objects panel" title="Hide objects panel"><span class="toggle-arrow" aria-hidden="true">›</span><span class="toggle-label">Objects</span></button>
+
+      <aside class="layers-panel" id="layers-panel" aria-label="Objects">
+        <div class="layers-title"><div><small>CHART STRUCTURE</small><h2>Objects</h2></div></div>
+        <details class="browser-section" open>
+          <summary>Tasks <small id="task-count">0</small></summary>
+          <div class="layers-list" id="task-list" role="list" aria-label="Task hierarchy"></div>
+        </details>
+        <details class="browser-section" open>
+          <summary>Milestones <small id="milestone-count">0</small></summary>
+          <div class="item-list" id="milestone-list" role="list" aria-label="Milestones"></div>
+        </details>
+        <details class="browser-section" open>
+          <summary>Arrows <small id="arrow-count">0</small></summary>
+          <div class="item-list" id="arrow-list" role="list" aria-label="Dependency arrows"></div>
+        </details>
+      </aside>
+    </main>
+
+    <script type="module" src="app.mjs"></script>
+  </body>
+</html>

@@ -16,7 +16,44 @@ def _parse_cli_date(value: str, date_format: str) -> date:
     return datetime.strptime(value, date_format).date()
 
 
+def _run_serve(argv) -> int:
+    """Handle ``jsonantt serve`` — launch the local studio web app."""
+    parser = argparse.ArgumentParser(
+        prog="jsonantt serve",
+        description="Serve the jsonantt studio (source editor + live Gantt/Graph canvas) locally.",
+    )
+    parser.add_argument("input", nargs="?", help="Optional JSON chart file to open in the studio")
+    parser.add_argument("--host", default="127.0.0.1", help="Host interface to bind (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=4174, help="Port to bind (default: 4174)")
+    parser.add_argument("--no-browser", action="store_true", help="Do not open a browser window")
+    parser.add_argument("-q", "--quiet", action="store_true", help="Suppress request logging")
+    args = parser.parse_args(argv)
+
+    from jsonantt.server import serve
+
+    try:
+        serve(
+            args.host,
+            args.port,
+            open_browser=not args.no_browser,
+            quiet=args.quiet,
+            json_path=args.input,
+        )
+    except FileNotFoundError:
+        print(f"error: input file not found: {args.input}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"error: could not start server: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv=None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] == "serve":
+        return _run_serve(argv[1:])
+
     parser = argparse.ArgumentParser(
         prog="jsonantt",
         description=(
@@ -26,7 +63,8 @@ def main(argv=None) -> int:
             "  jsonantt -t project.json task-table.png\n"
             "  jsonantt --burn project.json burn.png --burn-field cost --burn-period month --burn-group 0\n"
             "  jsonantt --burn-table project.json burn-table.csv --burn-field cost --burn-period year --burn-group 0\n"
-            "  jsonantt project-agreed.json compare.png --compare project-actual.json"
+            "  jsonantt project-agreed.json compare.png --compare project-actual.json\n"
+            "  jsonantt serve project.json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
