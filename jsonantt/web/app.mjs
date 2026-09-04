@@ -9,6 +9,7 @@ import { renderTable } from './table.mjs';
 import { renderChartSettings } from './settings.mjs';
 import { attachDatePicker } from './datepicker.mjs';
 import { formatSourceText, formatSourceData, serverFormattingAvailable } from './format.mjs';
+import { exportChart, serverExportAvailable } from './export.mjs';
 import { highlightJson } from './highlight.mjs';
 import { EXAMPLES, STARTER } from './demo-charts.mjs';
 
@@ -127,6 +128,8 @@ function commitDoc({ preserveInspector = false } = {}) {
 // ----------------------------------------------------------------- rendering
 
 function renderCanvas() {
+  const saveCsvButton = document.getElementById('save-csv');
+  if (saveCsvButton) saveCsvButton.hidden = state.canvasTab !== 'table';
   if (!state.chart) {
     elements.canvas.classList.add('preview-invalid');
     elements.canvas.dataset.error = state.error || 'Invalid JSON';
@@ -528,7 +531,7 @@ function deleteSelection() {
 }
 
 function download(filename, content, type) {
-  const blob = new Blob([content], { type });
+  const blob = content instanceof Blob ? content : new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -537,12 +540,51 @@ function download(filename, content, type) {
   URL.revokeObjectURL(url);
 }
 
-function canvasSvgText() {
-  const svg = elements.canvas.querySelector('svg');
-  if (!svg) return '';
-  const clone = svg.cloneNode(true);
-  clone.removeAttribute('style');
-  return new XMLSerializer().serializeToString(clone);
+/**
+ * Export the current canvas tab (gantt or table) via the `jsonantt serve`
+ * backend, which renders using the same matplotlib-based code path as the
+ * `jsonantt` command-line tool. Requires a running local server; there is no
+ * client-side rendering fallback for exported files.
+ */
+async function exportCanvas(format, { dpi } = {}) {
+  if (!state.source) return;
+  const mode = state.canvasTab === 'table' ? 'table' : 'gantt';
+  if (!(await serverExportAvailable())) {
+    setStatus(
+      `Export requires "jsonantt serve" (or run the jsonantt CLI directly: `
+        + `jsonantt chart.json ${mode === 'table' ? 'table' : 'chart'}.${format})`,
+      'error',
+    );
+    return;
+  }
+  try {
+    const blob = await exportChart(state.source, { mode, format, dpi });
+    download(`${mode}.${format}`, blob, blob.type);
+    toast(`${format.toUpperCase()} exported via CLI renderer`);
+  } catch (error) {
+    setStatus(`Export: ${error.message}`, 'error');
+  }
+}
+
+async function copyExportedSvg() {
+  if (!state.source) return;
+  const mode = state.canvasTab === 'table' ? 'table' : 'gantt';
+  if (!(await serverExportAvailable())) {
+    setStatus('Copy SVG requires "jsonantt serve" running locally', 'error');
+    return;
+  }
+  try {
+    const blob = await exportChart(state.source, { mode, format: 'svg' });
+    const text = await blob.text();
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('SVG copied (CLI renderer)');
+    } catch (error) {
+      download(`${mode}.svg`, blob, blob.type);
+    }
+  } catch (error) {
+    setStatus(`Export: ${error.message}`, 'error');
+  }
 }
 
 /** Open the chart settings dialog (optionally focused on a section). */
@@ -732,20 +774,15 @@ function wireToolbar() {
     event.target.value = '';
   });
   $('#save-source').addEventListener('click', () => download('chart.json', state.source, 'application/json'));
-  $('#copy-svg').addEventListener('click', async () => {
-    const text = canvasSvgText();
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      toast('SVG copied');
-    } catch (error) {
-      download(`${state.canvasTab}.svg`, text, 'image/svg+xml');
-    }
+  $('#copy-svg').addEventListener('click', copyExportedSvg);
+  $('#save-svg').addEventListener('click', () => exportCanvas('svg'));
+  $('#save-png').addEventListener('click', () => {
+    const dpiInput = window.prompt('PNG export DPI', '150');
+    if (dpiInput === null) return;
+    const dpi = Math.max(1, Math.round(Number(dpiInput)) || 150);
+    exportCanvas('png', { dpi });
   });
-  $('#save-svg').addEventListener('click', () => {
-    const text = canvasSvgText();
-    if (text) download(`${state.canvasTab}.svg`, text, 'image/svg+xml');
-  });
+  $('#save-csv').addEventListener('click', () => exportCanvas('csv'));
   $('#add-task').addEventListener('click', () => addTask());
   $('#add-subtask').addEventListener('click', () => addTask({ asChild: true }));
   $('#add-milestone').addEventListener('click', () => addTask({ milestone: true }));

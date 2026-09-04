@@ -42,7 +42,15 @@ Canvas tabs
   ``style.table_show_markers``. Double-click the table to jump straight to the table
   settings.
 
-The Gantt view is rendered as SVG and can be copied or saved from the **File** menu.
+The Gantt/table canvas preview is a lightweight in-browser SVG rendering used purely for
+live editing feedback. **Exported files (PNG/SVG/CSV) are never generated from that
+preview.** Copy SVG, Save SVG…, Save PNG…, and Save CSV… (File menu) all POST the current
+JSON source to the local ``jsonantt serve`` backend's ``/api/export`` endpoint, which
+renders through the exact same ``jsonantt.renderer`` (matplotlib) functions the
+``jsonantt`` command-line tool uses — so studio exports are produced identically to CLI
+output. Save PNG… prompts for a DPI value. Export requires a running local server; under
+static hosting (no ``jsonantt serve`` backend) these actions report an error explaining
+that the ``jsonantt`` CLI (or ``jsonantt serve``) is required.
 Clicking a bar, milestone, or table row selects the same object everywhere — canvas,
 objects panel, and properties box stay in sync.
 

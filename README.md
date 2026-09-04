@@ -89,7 +89,9 @@ jsonantt --dpi 300 project.json project.png   # high-resolution PNG
 jsonantt -r 1 project.json project.png   # top-level tasks only
 jsonantt --renderdepth 2 project.json project.png   # include one child level
 jsonantt -t project.json project-table.png   # task name / description table
+jsonantt -t project.json project-table.svg   # scalable SVG table
 jsonantt -t project.json project-table.csv   # CSV table export
+jsonantt --dpi 300 -t project.json project-table.png   # high-resolution PNG table
 jsonantt agreed.json compare.png --compare actual.json   # outline vs actual compare chart
 jsonantt -t agreed.json compare-table.csv --compare actual.json   # compare table with signed offsets
 jsonantt --burn project.json burn.png --burn-field cost --burn-period month --burn-group 0
@@ -157,7 +159,9 @@ Description and Name cells wrap to the measured rendered width of the column, an
 
 `--milestones-only` works with `--table` to render only milestone rows in a dedicated milestone table. `--no-milestones` does the opposite and excludes milestones.
 
-If the table output path ends in `.csv`, `jsonantt` writes CSV instead of an image.
+If the table output path ends in `.csv`, `jsonantt` writes CSV instead of an image. `.csv` output is only accepted for `--table`/`--burn-table` modes; Gantt and burn charts must be exported as `.png` (with `--dpi`) or `.svg`, and the CLI reports a clear error for any other extension or combination.
+
+The [studio](docs/studio.rst) (`jsonantt serve`) exports PNG/SVG/CSV files through this exact same `jsonantt.renderer` (matplotlib) code path over its local `/api/export` endpoint — there is no separate browser-side rendering used for exported files, so studio exports are produced identically to `jsonantt` CLI output.
 
 `--compare` turns the first JSON input into the planned/agreed baseline and overlays the second JSON as the updated/actual state. In compare charts, planned bars are drawn as slightly larger unfilled outlines, actual bars are drawn normally, removed planned tasks are struck through with no actual bar, and actual-only tasks render as normal filled bars. In compare tables and CSV output, the `Offset` column shows signed duration changes like `+2d`, `-1w`, `+3mo`, or `+1y`; milestones use the signed date shift instead.
 
