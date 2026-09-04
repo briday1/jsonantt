@@ -53,6 +53,7 @@ What it can do
    json-reference
    style-guide
    cli
+   studio
 
 .. toctree::
    :maxdepth: 2

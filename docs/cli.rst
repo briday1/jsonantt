@@ -38,6 +38,8 @@ Quick reference
      - Burn matrix table
    * - ``jsonantt -t in.json out.png --milestones-only``
      - Milestone-only table
+   * - ``jsonantt serve in.json``
+     - Open the interactive studio (see :doc:`studio`)
 
 Modes
 -----

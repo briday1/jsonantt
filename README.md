@@ -23,6 +23,7 @@ Charts are rendered with [matplotlib](https://matplotlib.org/) so they can be sa
 - **Table output mode** — render a task summary table with the same hierarchy and colour cues.
 - **Funded burn output** — render cost-over-time charts and period matrix tables from numeric task fields.
 - **PNG / PDF / SVG output** — whatever matplotlib supports.
+- **Interactive studio** — `jsonantt serve` opens a browser workspace with a JSON sidebar and live Gantt/Graph canvas.
 
 ---
 
@@ -167,6 +168,30 @@ Use `--burn-period` to choose `day`, `week`, `month`, `quarter`, or `year`. Use 
 Use `--date-line` to draw a single vertical reference line on chart outputs. It accepts either a date in the input file's `dateformat` or the special value `today`. Use `--date-line-color` to control its color.
 
 ---
+
+## Interactive studio
+
+Prefer working visually? `jsonantt serve` opens the **jsonantt studio** in your browser — a
+source sidebar, a live canvas, and a properties/objects side panel, styled after
+[pugflow](https://github.com/briday1/pugflow):
+
+```bash
+jsonantt serve                  # start with the built-in starter chart
+jsonantt serve project.json     # open an existing chart
+jsonantt serve --port 8080 --no-browser
+```
+
+- **Sidebar** — JSON editor with line numbers plus a `STYLE` tab for the `style` block.
+- **Canvas tabs** — **Gantt** (default, live-updating) and **Graph** (hierarchy + dependency view).
+- **Objects panel** — tasks, milestones, and arrows; selecting one highlights it on the canvas.
+- **Properties box** — edit `name`, `id`, `start`, `end`, `duration`, `not_before`, colour,
+  milestone flags, and description, with a **Relationships** section listing what the entry
+  *depends on* (upstream: `not_before`, parent, incoming arrows) and what *depends on it*
+  (downstream: subtasks, chained tasks, outgoing arrows). Every related entry is clickable.
+- Add tasks/subtasks/milestones/arrows, undo/redo, zoom, dark mode, and SVG copy/save.
+
+Chart images, tables, burn and compare output stay on the command line — the studio is a
+JSON authoring and preview layer, and never changes the JSON format.
 
 ## JSON reference
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import threading
+from urllib.error import HTTPError
 from urllib.request import urlopen
 
 import pytest
@@ -65,7 +66,21 @@ class TestStudioServer:
         with urlopen(f"{running_server}/app.mjs") as response:
             assert response.headers["Content-Type"].startswith("text/javascript")
 
-    def test_project_json_is_served_when_configured(self, running_server):
-        # the fixture server has no project attached
-        with pytest.raises(Exception):
+    def test_project_json_is_served_when_configured(self):
+        httpd = server.create_server("127.0.0.1", 0, quiet=True)
+        httpd.project_json = '{"title": "Attached"}'
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{httpd.server_address[1]}/__project.json"
+            with urlopen(url) as response:
+                assert json.loads(response.read().decode("utf-8"))["title"] == "Attached"
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=5)
+
+    def test_project_json_is_absent_by_default(self, running_server):
+        with pytest.raises(HTTPError) as excinfo:
             urlopen(f"{running_server}/__project.json")
+        assert excinfo.value.code == 404
