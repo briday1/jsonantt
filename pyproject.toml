@@ -36,3 +36,6 @@ jsonantt = "jsonantt.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["jsonantt*"]
+
+[tool.setuptools.package-data]
+jsonantt = ["web/*.html", "web/*.css", "web/*.mjs"]
