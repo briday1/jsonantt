@@ -98,6 +98,10 @@ All fields at a glance
      - Ticks
      - ``null``
      - Minor tick interval (year/quarter/month/week/day)
+   * - ``fiscal_year_start``
+     - Ticks
+     - ``null``
+     - Fiscal year start as ``"MM"`` or ``"MM-DD"`` (e.g. ``"10-01"``). Year/quarter ticks snap to the fiscal calendar and are labelled ``FY26`` / ``Q1 FY26`` (fiscal years are named after the calendar year they end in)
    * - ``major_grid_width``
      - Ticks
      - ``2.0``
@@ -264,6 +268,26 @@ Typical tick combinations:
    * - ``"week"``
      - ``"day"``
      - Short-horizon detail
+
+Fiscal calendars
+~~~~~~~~~~~~~~~~
+
+Set ``fiscal_year_start`` (for example ``"10-01"`` for a fiscal year starting 1 October)
+to switch year and quarter ticks to the fiscal calendar. Ticks then land on the fiscal
+boundaries and are labelled with fiscal names — ``FY26`` for years and ``Q1 FY26`` for
+quarters. A fiscal year is named after the calendar year in which it ends, so with a
+``"10-01"`` start, October 2025 … September 2026 is ``FY26``. Month, week, and day ticks
+are unaffected.
+
+.. code-block:: json
+
+   {
+     "style": {
+       "fiscal_year_start": "10-01",
+       "major_tick": "quarter",
+       "minor_tick": "month"
+     }
+   }
 
 Table output
 ------------

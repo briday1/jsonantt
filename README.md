@@ -181,17 +181,42 @@ jsonantt serve project.json     # open an existing chart
 jsonantt serve --port 8080 --no-browser
 ```
 
-- **Sidebar** — JSON editor with line numbers plus a `STYLE` tab for the `style` block.
-- **Canvas tabs** — **Gantt** (default, live-updating) and **Graph** (hierarchy + dependency view).
+- **Sidebar** — JSON editor with line numbers and syntax highlighting. Every edit re-renders
+  the canvas instantly; parse errors are shown inline without discarding the last good render.
+- **Canvas tabs** — **Gantt** (default, live-updating) and **Table** (the same task table the
+  CLI renders, honouring `style.table_columns`, `table_colorize`, and `table_show_markers`).
+  Clicking a bar, milestone, or table row keeps the objects panel and properties box in sync.
+- **Chart settings** — the **Settings → Chart settings…** dialog exposes the overall chart
+  configuration: `title`, `dateformat`, chart `start`/`end` (with a calendar date picker), the
+  time scale (major/minor ticks, fiscal calendar), table columns/options, and appearance
+  (colours, row height, render depth, …). Every change rewrites the JSON source, so it persists
+  through the same undo/redo and save flow as any other edit.
 - **Objects panel** — tasks, milestones, and arrows; selecting one highlights it on the canvas.
 - **Properties box** — edit `name`, `id`, `start`, `end`, `duration`, `not_before`, colour,
-  milestone flags, and description, with a **Relationships** section listing what the entry
-  *depends on* (upstream: `not_before`, parent, incoming arrows) and what *depends on it*
-  (downstream: subtasks, chained tasks, outgoing arrows). Every related entry is clickable.
+  milestone flags, and description. Date fields have a calendar popup that writes dates in the
+  chart's own `dateformat`. A **Relationships** section lists what the entry *depends on*
+  (upstream: `not_before`, parent, incoming arrows) and what *depends on it* (downstream:
+  subtasks, chained tasks, outgoing arrows). Every related entry is clickable.
 - Add tasks/subtasks/milestones/arrows, undo/redo, zoom, dark mode, and SVG copy/save.
 
-Chart images, tables, burn and compare output stay on the command line — the studio is a
+**Formatting parity:** the studio's *Format JSON* button uses the exact same formatter as the
+CLI (`jsonantt fmt`), served over the local `/api/format` endpoint, so saved output is
+byte-for-byte identical either way. When the studio is hosted statically (no local server), a
+matching in-browser implementation (2-space indent, trailing newline) is used instead.
+
+Chart images, burn and compare output stay on the command line — the studio is a
 JSON authoring and preview layer, and never changes the JSON format.
+
+### `jsonantt fmt`
+
+```bash
+jsonantt fmt project.json            # reformat in place
+jsonantt fmt project.json -o out.json
+cat project.json | jsonantt fmt      # read stdin, write stdout
+```
+
+`fmt` runs the canonical jsonantt formatter (2-space indent, trailing newline, key order
+preserved). The studio uses the same formatter, so both paths produce identical files.
 
 ## JSON reference
 
@@ -314,6 +339,7 @@ JSON authoring and preview layer, and never changes the JSON format.
 | `major_milestone_size` | `null` | Optional default marker size in points for major milestones |
 | `major_tick` | `null` | Major tick unit: `"year"`, `"quarter"`, `"month"`, `"week"` |
 | `minor_tick` | `null` | Minor tick unit: `"quarter"`, `"month"`, `"week"`, `"day"` |
+| `fiscal_year_start` | `null` | Fiscal year start as `"MM"` or `"MM-DD"` (e.g. `"10-01"` for 1 October). Year/quarter ticks snap to the fiscal calendar and are labelled `FY26`, `Q1 FY26`, … (fiscal years are named after the calendar year they end in) |
 | `major_grid_width` | `2.0` | Major gridline linewidth |
 | `minor_grid_width` | `1.5` | Minor gridline linewidth |
 | `tick_position` | `"top"` | X-axis label position: `"top"`, `"bottom"`, or `"both"` |

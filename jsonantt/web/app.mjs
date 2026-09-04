@@ -279,17 +279,22 @@ function selectedTask() {
 // ---------------------------------------------------------------- inspector
 
 function field(labelText, inputElement, help) {
-  const label = document.createElement('label');
+  // Composite controls (e.g. a date input + calendar trigger wrapper) must not
+  // live inside a <label>, or clicks on the trigger would refocus the input.
+  const container = inputElement instanceof HTMLLabelElement || !inputElement.classList.contains('date-field')
+    ? document.createElement('label')
+    : document.createElement('div');
+  if (container.tagName === 'DIV') container.className = 'inspector-field';
   const span = document.createElement('span');
   span.textContent = labelText;
-  label.append(span, inputElement);
+  container.append(span, inputElement);
   if (help) {
     const hint = document.createElement('small');
     hint.className = 'inspector-help';
     hint.textContent = help;
-    label.append(hint);
+    container.append(hint);
   }
-  return label;
+  return container;
 }
 
 function textInput(value, onChange, { type = 'text', placeholder = '' } = {}) {
@@ -303,8 +308,8 @@ function textInput(value, onChange, { type = 'text', placeholder = '' } = {}) {
 
 function dateInput(value, onChange, dateFormat, { placeholder = '' } = {}) {
   const input = textInput(value, onChange, { placeholder });
-  attachDatePicker(input, { format: dateFormat, onPick: (text) => onChange(text) });
-  return input;
+  const wrapper = attachDatePicker(input, { format: dateFormat, onPick: (text) => onChange(text) });
+  return wrapper || input;
 }
 
 function updateRaw(raw, key, value) {
@@ -377,7 +382,10 @@ function renderInspector() {
   const milestoneInput = document.createElement('input');
   milestoneInput.type = 'checkbox';
   milestoneInput.checked = Boolean(raw.milestone || raw.major_milestone);
-  milestoneInput.addEventListener('change', () => updateRaw(raw, 'milestone', milestoneInput.checked));
+  milestoneInput.addEventListener('change', () => {
+    updateRaw(raw, 'milestone', milestoneInput.checked);
+    renderInspector();
+  });
   const milestoneLabel = document.createElement('span');
   milestoneLabel.textContent = 'Milestone';
   milestoneToggle.append(milestoneInput, milestoneLabel);
@@ -388,7 +396,10 @@ function renderInspector() {
   const majorInput = document.createElement('input');
   majorInput.type = 'checkbox';
   majorInput.checked = Boolean(raw.major_milestone);
-  majorInput.addEventListener('change', () => updateRaw(raw, 'major_milestone', majorInput.checked));
+  majorInput.addEventListener('change', () => {
+    updateRaw(raw, 'major_milestone', majorInput.checked);
+    renderInspector();
+  });
   const majorLabel = document.createElement('span');
   majorLabel.textContent = 'Major milestone';
   majorToggle.append(majorInput, majorLabel);
@@ -769,6 +780,7 @@ function wireToolbar() {
   });
 
   document.addEventListener('click', (event) => {
+    if (event.target.closest('#settings-dialog')) return;
     document.querySelectorAll('details.toolbar-menu[open]').forEach((menu) => {
       if (!menu.contains(event.target)) menu.removeAttribute('open');
     });

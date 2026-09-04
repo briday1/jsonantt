@@ -391,7 +391,8 @@ code { padding: 2px 4px; border-radius: 3px; color: var(--accent); background: v
   box-shadow: 0 8px 25px var(--shadow);
 }
 .inspector-drag-handle { position: sticky; z-index: 3; top: -13px; margin: -13px -13px 10px; padding: 9px 12px; border-bottom: 1px solid var(--border); border-radius: 9px 9px 0 0; color: var(--heading); background: var(--surface-soft); font-size: 11px; font-weight: 750; cursor: move; user-select: none; }
-.canvas-inspector label { display: grid; gap: 3px; margin: 7px 0; color: var(--muted); font-size: 10px; }
+.canvas-inspector label, .canvas-inspector .inspector-field { display: grid; gap: 3px; margin: 7px 0; color: var(--muted); font-size: 10px; }
+.inspector-field > span { color: var(--muted); }
 .canvas-inspector input, .canvas-inspector select, .canvas-inspector textarea { width: 100%; min-height: 29px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 5px; color: var(--text); background: var(--surface); font: 11px Consolas, monospace; }
 .canvas-inspector textarea { resize: vertical; line-height: 1.4; }
 .canvas-inspector input:focus-visible, .canvas-inspector select:focus-visible, .canvas-inspector textarea:focus-visible { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--selection); }

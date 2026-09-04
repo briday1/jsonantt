@@ -120,11 +120,28 @@ function buildCalendar({ format, initial, onPick }) {
  * `onPick(text)` is called with the picked date in that format.
  */
 export function attachDatePicker(input, { format, onPick }) {
+  wireGlobalListeners(input);
+  if (!input.parentNode) {
+    // Not mounted yet: wrap now and let the caller append the wrapper instead.
+    const wrapper = document.createElement('span');
+    wrapper.className = 'date-field';
+    wrapper.append(input);
+    buildTrigger(wrapper, input, { format, onPick });
+    return wrapper;
+  }
+  buildTrigger(wrapInline(input), input, { format, onPick });
+  return null;
+}
+
+function wrapInline(input) {
   const wrapper = document.createElement('span');
   wrapper.className = 'date-field';
   input.replaceWith(wrapper);
   wrapper.append(input);
+  return wrapper;
+}
 
+function buildTrigger(wrapper, input, { format, onPick }) {
   const trigger = document.createElement('button');
   trigger.type = 'button';
   trigger.className = 'date-trigger';
@@ -146,16 +163,25 @@ export function attachDatePicker(input, { format, onPick }) {
       initial = null;
     }
     const popup = buildCalendar({ format, initial, onPick });
+    // Keep clicks inside the calendar from reaching the dismissal listener.
+    popup.addEventListener('click', (clickEvent) => clickEvent.stopPropagation());
     wrapper.append(popup);
     openPopup = popup;
   });
 }
 
-if (typeof document !== 'undefined') {
-  document.addEventListener('click', (event) => {
+// Dismissal listeners are attached per-document the first time a picker is
+// wired, so the module works regardless of when/where it was imported.
+const wiredDocuments = new WeakSet();
+
+function wireGlobalListeners(input) {
+  const doc = input.ownerDocument;
+  if (!doc || wiredDocuments.has(doc)) return;
+  wiredDocuments.add(doc);
+  doc.addEventListener('click', (event) => {
     if (openPopup && !openPopup.contains(event.target)) closeOpenPopup();
   });
-  document.addEventListener('keydown', (event) => {
+  doc.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && openPopup) {
       event.stopPropagation();
       closeOpenPopup();

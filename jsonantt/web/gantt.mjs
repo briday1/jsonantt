@@ -64,7 +64,7 @@ function tickDates(start, end, fiscalStart) {
   const step = spanDays <= 400 ? 1 : (spanDays <= 1200 ? 3 : 12);
   if (fiscalStart && step === 3) {
     // Quarter ticks land on the fiscal calendar and use fiscal labels.
-    let { start: cursor } = fiscalQuarterInfo(start, fiscalStart);
+    let { start: cursor } = fiscalQuarterInfo(addDays(start, -1), fiscalStart);
     while (cursor <= end) {
       if (cursor >= start) ticks.push(new Date(cursor));
       const monthIndex = cursor.getUTCMonth() + 3;
@@ -80,10 +80,10 @@ function tickDates(start, end, fiscalStart) {
     };
   }
   let cursor = fiscalStart && step === 12
-    ? fiscalYearInfo(start, fiscalStart).anchor
+    ? fiscalYearInfo(addDays(start, -1), fiscalStart).anchor
     : startOfMonth(start);
   while (cursor <= end) {
-    if (cursor >= start) ticks.push(new Date(cursor));
+    if (cursor >= addDays(start, -(fiscalStart && step === 12 ? 1 : 0))) ticks.push(new Date(cursor));
     cursor = fiscalStart && step === 12
       ? fiscalAnchor(cursor.getUTCFullYear() + 1, fiscalStart)
       : new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + step, 1));
@@ -93,6 +93,18 @@ function tickDates(start, end, fiscalStart) {
       ticks,
       format: '%Y',
       label: (tick) => `FY${String(fiscalYearInfo(tick, fiscalStart).year % 100).padStart(2, '0')}`,
+    };
+  }
+  if (fiscalStart && step === 1) {
+    // Monthly ticks keep the calendar months but are prefixed with the fiscal
+    // quarter, so a fiscal calendar is visible at every supported scale.
+    return {
+      ticks,
+      format: '%b %Y',
+      label: (tick) => {
+        const info = fiscalQuarterInfo(tick, fiscalStart);
+        return `Q${info.quarter} FY${String(info.year % 100).padStart(2, '0')} ${formatDate(tick, '%b')}`;
+      },
     };
   }
   return { ticks, format: step === 12 ? '%Y' : '%b %Y' };
@@ -110,6 +122,7 @@ function labelFor(task) {
  */
 export function renderGantt(chart, options = {}) {
   const { selectedKey = null, showArrows = true, todayMarker = false } = options;
+  const fiscalStart = parseFiscalYearStart(chart.style.fiscal_year_start);
   const rows = chartRows(chart, Number(chart.style.render_depth || 0));
   const rowHeight = 28;
   const barHeight = 15;
@@ -150,7 +163,6 @@ export function renderGantt(chart, options = {}) {
 
   const gridTop = headerHeight - 12;
   const gridBottom = height - padding;
-  const fiscalStart = parseFiscalYearStart(chart.style.fiscal_year_start);
   const { ticks, format, label: tickLabel } = tickDates(domainStart, domainEnd, fiscalStart);
   ticks.forEach((tick) => {
     const x = scale(tick);
