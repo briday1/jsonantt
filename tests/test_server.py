@@ -33,6 +33,7 @@ class TestStaticAssets:
             "format.mjs",
             "highlight.mjs",
             "demo-charts.mjs",
+            "export.mjs",
         ],
     )
     def test_expected_assets_are_packaged(self, name):
@@ -117,6 +118,92 @@ class TestStudioServer:
         with pytest.raises(HTTPError) as excinfo:
             urlopen(f"{running_server}/__project.json")
         assert excinfo.value.code == 404
+
+
+class TestExportEndpoint:
+    """Studio exports must be produced by the same matplotlib renderer as the CLI."""
+
+    SAMPLE_CHART = json.dumps(
+        {
+            "title": "T",
+            "dateformat": "%Y-%m-%d",
+            "tasks": [{"name": "A", "start": "2024-01-01", "duration": "2w"}],
+        }
+    )
+
+    def _post(self, base_url, mode, fmt, dpi=None):
+        query = f"mode={mode}&format={fmt}"
+        if dpi is not None:
+            query += f"&dpi={dpi}"
+        request = Request(
+            f"{base_url}/api/export?{query}",
+            data=self.SAMPLE_CHART.encode("utf-8"),
+            method="POST",
+        )
+        return urlopen(request)
+
+    def test_gantt_png_export_matches_cli_renderer(self, running_server, tmp_path):
+        from jsonantt.cli import main
+
+        with self._post(running_server, "gantt", "png", dpi=80) as response:
+            assert response.headers["Content-Type"] == "image/png"
+            via_endpoint = response.read()
+
+        chart_path = tmp_path / "chart.json"
+        chart_path.write_text(self.SAMPLE_CHART, encoding="utf-8")
+        cli_output = tmp_path / "chart.png"
+        assert main([str(chart_path), str(cli_output), "--dpi", "80"]) == 0
+        assert via_endpoint == cli_output.read_bytes()
+
+    def test_gantt_svg_export(self, running_server):
+        with self._post(running_server, "gantt", "svg") as response:
+            assert response.headers["Content-Type"] == "image/svg+xml"
+            body = response.read()
+        assert body.startswith(b"<?xml")
+
+    def test_table_png_export(self, running_server):
+        with self._post(running_server, "table", "png") as response:
+            assert response.headers["Content-Type"] == "image/png"
+            body = response.read()
+        assert body.startswith(b"\x89PNG\r\n\x1a\n")
+
+    def test_table_svg_export(self, running_server):
+        with self._post(running_server, "table", "svg") as response:
+            assert response.headers["Content-Type"] == "image/svg+xml"
+            assert response.read().startswith(b"<?xml")
+
+    def test_table_csv_export(self, running_server):
+        with self._post(running_server, "table", "csv") as response:
+            assert response.headers["Content-Type"] == "text/csv"
+            body = response.read().decode("utf-8")
+        assert body.startswith("Task,Name")
+
+    def test_csv_export_rejected_for_gantt_mode(self, running_server):
+        with pytest.raises(HTTPError) as excinfo:
+            self._post(running_server, "gantt", "csv")
+        assert excinfo.value.code == 400
+        payload = json.loads(excinfo.value.read().decode("utf-8"))
+        assert "csv" in payload["error"]
+
+    def test_unknown_mode_is_rejected(self, running_server):
+        with pytest.raises(HTTPError) as excinfo:
+            self._post(running_server, "bogus", "png")
+        assert excinfo.value.code == 400
+
+    def test_unknown_format_is_rejected(self, running_server):
+        with pytest.raises(HTTPError) as excinfo:
+            self._post(running_server, "gantt", "bogus")
+        assert excinfo.value.code == 400
+
+    def test_invalid_json_body_is_rejected(self, running_server):
+        request = Request(
+            f"{running_server}/api/export?mode=gantt&format=png",
+            data=b"{oops",
+            method="POST",
+        )
+        with pytest.raises(HTTPError) as excinfo:
+            urlopen(request)
+        assert excinfo.value.code == 400
 
 
 class TestFormatEndpoint:

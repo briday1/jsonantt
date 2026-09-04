@@ -212,6 +212,23 @@ def main(argv=None) -> int:
             print(f"error: failed to parse {args.compare}: {exc}", file=sys.stderr)
             return 1
 
+    output_ext = Path(args.output).suffix.lower()
+    is_table_like = args.table or args.burn_table
+    if output_ext == ".csv" and not is_table_like:
+        print(
+            "error: .csv output is only supported for --table or --burn-table modes "
+            "(Gantt/burn charts must be exported as .png or .svg)",
+            file=sys.stderr,
+        )
+        return 1
+    if output_ext not in {".png", ".svg", ".csv"}:
+        print(
+            f"error: unsupported output format {output_ext or '(none)'!r}; "
+            "use .png (with --dpi) or .svg for charts/tables, or .csv for table output",
+            file=sys.stderr,
+        )
+        return 1
+
     line_date = None
     if args.date_line:
         if args.table:
