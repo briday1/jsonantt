@@ -21,18 +21,79 @@ function startOfMonth(value) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), 1));
 }
 
-function tickDates(start, end) {
+/** Parse a fiscal-year start spec ("MM" or "MM-DD") into { month, day } (1-based month). */
+export function parseFiscalYearStart(spec) {
+  if (typeof spec !== 'string') return null;
+  const match = /^\s*(\d{1,2})(?:-(\d{1,2}))?\s*$/.exec(spec);
+  if (!match) return null;
+  const month = Number(match[1]);
+  const day = match[2] === undefined ? 1 : Number(match[2]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { month, day };
+}
+
+function fiscalAnchor(year, fiscalStart) {
+  const maxDay = new Date(Date.UTC(year, fiscalStart.month, 0)).getUTCDate();
+  return new Date(Date.UTC(year, fiscalStart.month - 1, Math.min(fiscalStart.day, maxDay)));
+}
+
+/** Fiscal year (named after the calendar year it ends in) + its start date. */
+function fiscalYearInfo(value, fiscalStart) {
+  const anchor = fiscalAnchor(value.getUTCFullYear(), fiscalStart);
+  if (value >= anchor) return { year: value.getUTCFullYear() + 1, anchor };
+  return { year: value.getUTCFullYear(), anchor: fiscalAnchor(value.getUTCFullYear() - 1, fiscalStart) };
+}
+
+/** Fiscal quarter (1-4) + quarter start for a date. */
+function fiscalQuarterInfo(value, fiscalStart) {
+  const { year, anchor } = fiscalYearInfo(value, fiscalStart);
+  const monthsSince = (value.getUTCFullYear() - anchor.getUTCFullYear()) * 12 + (value.getUTCMonth() - anchor.getUTCMonth());
+  const quarterIndex = Math.max(0, Math.min(3, Math.floor(monthsSince / 3)));
+  const monthIndex = anchor.getUTCMonth() + quarterIndex * 3;
+  const start = fiscalAnchor(anchor.getUTCFullYear() + Math.floor(monthIndex / 12), { month: (monthIndex % 12) + 1, day: fiscalStart.day });
+  return { year, quarter: quarterIndex + 1, start };
+}
+
+function tickDates(start, end, fiscalStart) {
   const spanDays = Math.max(1, Math.round((end - start) / DAY));
   const ticks = [];
-  if (spanDays <= 45) {
+  if (spanDays <= 45 && !fiscalStart) {
     for (let cursor = new Date(start); cursor <= end; cursor = addDays(cursor, 7)) ticks.push(new Date(cursor));
     return { ticks, format: '%d %b' };
   }
   const step = spanDays <= 400 ? 1 : (spanDays <= 1200 ? 3 : 12);
-  let cursor = startOfMonth(start);
+  if (fiscalStart && step === 3) {
+    // Quarter ticks land on the fiscal calendar and use fiscal labels.
+    let { start: cursor } = fiscalQuarterInfo(start, fiscalStart);
+    while (cursor <= end) {
+      if (cursor >= start) ticks.push(new Date(cursor));
+      const monthIndex = cursor.getUTCMonth() + 3;
+      cursor = fiscalAnchor(cursor.getUTCFullYear() + Math.floor(monthIndex / 12), { month: (monthIndex % 12) + 1, day: fiscalStart.day });
+    }
+    return {
+      ticks,
+      format: fiscalStart,
+      label: (tick) => {
+        const info = fiscalQuarterInfo(tick, fiscalStart);
+        return `Q${info.quarter} FY${String(info.year % 100).padStart(2, '0')}`;
+      },
+    };
+  }
+  let cursor = fiscalStart && step === 12
+    ? fiscalYearInfo(start, fiscalStart).anchor
+    : startOfMonth(start);
   while (cursor <= end) {
     if (cursor >= start) ticks.push(new Date(cursor));
-    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + step, 1));
+    cursor = fiscalStart && step === 12
+      ? fiscalAnchor(cursor.getUTCFullYear() + 1, fiscalStart)
+      : new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + step, 1));
+  }
+  if (fiscalStart && step === 12) {
+    return {
+      ticks,
+      format: '%Y',
+      label: (tick) => `FY${String(fiscalYearInfo(tick, fiscalStart).year % 100).padStart(2, '0')}`,
+    };
   }
   return { ticks, format: step === 12 ? '%Y' : '%b %Y' };
 }
@@ -89,7 +150,8 @@ export function renderGantt(chart, options = {}) {
 
   const gridTop = headerHeight - 12;
   const gridBottom = height - padding;
-  const { ticks, format } = tickDates(domainStart, domainEnd);
+  const fiscalStart = parseFiscalYearStart(chart.style.fiscal_year_start);
+  const { ticks, format, label: tickLabel } = tickDates(domainStart, domainEnd, fiscalStart);
   ticks.forEach((tick) => {
     const x = scale(tick);
     svg.append(element('line', {
@@ -97,7 +159,7 @@ export function renderGantt(chart, options = {}) {
     }));
     svg.append(element('text', {
       x, y: gridTop - 8, fill: '#627d98', 'font-size': 10, 'text-anchor': 'middle', 'font-family': 'Inter, sans-serif',
-    }, formatDate(tick, format)));
+    }, tickLabel ? tickLabel(tick) : formatDate(tick, format)));
   });
 
   rows.forEach((task, index) => {

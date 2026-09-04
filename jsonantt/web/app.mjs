@@ -5,7 +5,11 @@
  */
 import { parseChart, taskAtPath, removeTaskAtPath, taskRelations, formatDate, parseDate } from './model.mjs';
 import { renderGantt } from './gantt.mjs';
-import { renderGraph } from './graph.mjs';
+import { renderTable } from './table.mjs';
+import { renderChartSettings } from './settings.mjs';
+import { attachDatePicker } from './datepicker.mjs';
+import { formatSourceText, formatSourceData, serverFormattingAvailable } from './format.mjs';
+import { highlightJson } from './highlight.mjs';
 import { EXAMPLES, STARTER } from './demo-charts.mjs';
 
 const STORAGE_SOURCE = 'jsonantt.source';
@@ -21,10 +25,11 @@ const state = {
   error: null,
   selection: null, // { kind: 'task' | 'arrow', key, path?, index? }
   canvasTab: 'gantt',
-  sourceTab: 'json',
   zoom: 100,
   showArrows: true,
   todayMarker: false,
+  serverFormat: null, // null = unknown, boolean once probed
+  settingsFocus: 'general',
   undoStack: [],
   redoStack: [],
 };
@@ -32,6 +37,8 @@ const state = {
 const elements = {
   source: $('#source'),
   lineNumbers: $('#line-numbers'),
+  highlightLayer: $('#highlight-layer'),
+  highlightCode: $('#highlight-code'),
   status: $('#status'),
   canvas: $('#canvas'),
   toast: $('#canvas-toast'),
@@ -41,6 +48,8 @@ const elements = {
   milestoneList: $('#milestone-list'),
   arrowList: $('#arrow-list'),
   summary: $('#chart-summary'),
+  settingsDialog: $('#settings-dialog'),
+  settingsContent: $('#settings-content'),
   main: document.querySelector('main'),
 };
 
@@ -53,24 +62,15 @@ function setSource(text, { pushHistory = true, refreshEditor = true, preserveIns
     state.redoStack.length = 0;
   }
   state.source = text;
-  if (refreshEditor && state.sourceTab === 'json') elements.source.value = text;
+  if (refreshEditor) elements.source.value = text;
   try {
     localStorage.setItem(STORAGE_SOURCE, text);
   } catch (error) {
     /* storage is optional */
   }
   renderLineNumbers();
+  renderHighlight();
   compile({ preserveInspector });
-}
-
-function currentStyleText() {
-  const style = state.doc && state.doc.style ? state.doc.style : {};
-  return JSON.stringify(style, null, 2);
-}
-
-function syncEditorForTab() {
-  elements.source.value = state.sourceTab === 'json' ? state.source : currentStyleText();
-  renderLineNumbers();
 }
 
 function compile({ preserveInspector = false } = {}) {
@@ -86,6 +86,7 @@ function compile({ preserveInspector = false } = {}) {
   }
   renderCanvas();
   renderObjects();
+  renderSettings();
   if (!preserveInspector) renderInspector();
 }
 
@@ -106,10 +107,21 @@ function renderLineNumbers() {
   elements.lineNumbers.style.transform = `translateY(${-elements.source.scrollTop}px)`;
 }
 
-/** Serialise the in-memory document back into the editor. */
+/** Keep the syntax-highlight overlay in sync with the editor content. */
+function renderHighlight() {
+  if (!elements.highlightCode) return;
+  elements.highlightCode.innerHTML = highlightJson(`${elements.source.value}\n`);
+  syncHighlightScroll();
+}
+
+function syncHighlightScroll() {
+  if (!elements.highlightLayer) return;
+  elements.highlightLayer.style.transform = `translate(${-elements.source.scrollLeft}px, ${-elements.source.scrollTop}px)`;
+}
+
+/** Serialise the in-memory document back into the editor (canonical style). */
 function commitDoc({ preserveInspector = false } = {}) {
-  setSource(JSON.stringify(state.doc, null, 2), { preserveInspector });
-  if (state.sourceTab === 'style') syncEditorForTab();
+  setSource(formatSourceData(state.doc), { preserveInspector });
 }
 
 // ----------------------------------------------------------------- rendering
@@ -125,11 +137,15 @@ function renderCanvas() {
     showArrows: state.showArrows,
     todayMarker: state.todayMarker,
   };
-  const svg = state.canvasTab === 'graph'
-    ? renderGraph(state.chart, options)
-    : renderGantt(state.chart, options);
-  svg.style.transform = `scale(${state.zoom / 100})`;
-  elements.canvas.replaceChildren(svg);
+  let view;
+  if (state.canvasTab === 'table') {
+    view = renderTable(state.chart, options);
+    if (state.error) view.classList.add('preview-invalid');
+  } else {
+    view = renderGantt(state.chart, options);
+    view.style.transform = `scale(${state.zoom / 100})`;
+  }
+  elements.canvas.replaceChildren(view);
   elements.canvas.classList.toggle('preview-invalid', Boolean(state.error));
   if (state.error) elements.canvas.dataset.error = state.error;
   else delete elements.canvas.dataset.error;
@@ -227,6 +243,18 @@ function emptyNote(text) {
   return note;
 }
 
+// ------------------------------------------------------------ chart settings
+
+/** Re-render the chart settings form from the current document. */
+function renderSettings() {
+  if (!elements.settingsContent || !elements.settingsDialog) return;
+  renderChartSettings(elements.settingsContent, state.doc, {
+    initialFocus: state.settingsFocus,
+    onCommit: () => commitDoc({ preserveInspector: true }),
+  });
+  state.settingsFocus = 'general';
+}
+
 // ---------------------------------------------------------------- selection
 
 function selectKey(key, kind) {
@@ -270,6 +298,12 @@ function textInput(value, onChange, { type = 'text', placeholder = '' } = {}) {
   input.value = value === null || value === undefined ? '' : String(value);
   input.placeholder = placeholder;
   input.addEventListener('input', () => onChange(input.value, input));
+  return input;
+}
+
+function dateInput(value, onChange, dateFormat, { placeholder = '' } = {}) {
+  const input = textInput(value, onChange, { placeholder });
+  attachDatePicker(input, { format: dateFormat, onPick: (text) => onChange(text) });
   return input;
 }
 
@@ -323,8 +357,8 @@ function renderInspector() {
   const grid = document.createElement('div');
   grid.className = 'inspector-grid';
   grid.append(
-    field('Start', textInput(raw.start, (value) => updateRaw(raw, 'start', value), { placeholder: formatDate(new Date(), dateFormat) })),
-    field('End', textInput(raw.end, (value) => updateRaw(raw, 'end', value))),
+    field('Start', dateInput(raw.start, (value) => updateRaw(raw, 'start', value), dateFormat, { placeholder: formatDate(new Date(), dateFormat) })),
+    field('End', dateInput(raw.end, (value) => updateRaw(raw, 'end', value), dateFormat)),
   );
   fragment.append(grid);
 
@@ -361,14 +395,16 @@ function renderInspector() {
   fragment.append(majorToggle);
 
   if (raw.milestone || raw.major_milestone) {
-    fragment.append(field('Milestone date(s)', textInput(
+    const commitDates = (value) => {
+      const parts = value.split(',').map((part) => part.trim()).filter(Boolean);
+      if (!parts.length) updateRaw(raw, 'date', '');
+      else updateRaw(raw, 'date', parts.length === 1 ? parts[0] : parts);
+    };
+    fragment.append(field('Milestone date(s)', dateInput(
       Array.isArray(raw.date) ? raw.date.join(', ') : raw.date,
-      (value) => {
-        const parts = value.split(',').map((part) => part.trim()).filter(Boolean);
-        if (!parts.length) updateRaw(raw, 'date', '');
-        else updateRaw(raw, 'date', parts.length === 1 ? parts[0] : parts);
-      },
-    ), 'Comma separated for milestone chains'));
+      commitDates,
+      dateFormat,
+    ), 'Comma separated for milestone chains; the calendar edits the last date'));
   }
 
   const description = document.createElement('textarea');
@@ -498,37 +534,38 @@ function canvasSvgText() {
   return new XMLSerializer().serializeToString(clone);
 }
 
+/** Open the chart settings dialog (optionally focused on a section). */
+function openSettings(focus = 'general') {
+  if (!elements.settingsDialog) return;
+  state.settingsFocus = focus;
+  renderSettings();
+  elements.settingsDialog.showModal();
+}
+
+/** Reformat the source with the canonical (CLI-identical) formatter. */
+async function formatSourceAction() {
+  try {
+    const result = await formatSourceText(state.source, { server: state.serverFormat !== false });
+    if (result.text !== state.source) {
+      setSource(result.text);
+      toast(result.usedServer ? 'Formatted with CLI formatter' : 'Formatted');
+    } else {
+      toast('Already formatted');
+    }
+  } catch (error) {
+    setStatus(`Format: ${error.message}`, 'error');
+  }
+}
+
 // -------------------------------------------------------------------- wiring
 
 function wireEditor() {
   elements.source.addEventListener('input', () => {
-    if (state.sourceTab === 'json') {
-      setSource(elements.source.value, { refreshEditor: false });
-      return;
-    }
-    try {
-      const style = JSON.parse(elements.source.value);
-      if (!state.doc) return;
-      state.doc.style = style;
-      setSource(JSON.stringify(state.doc, null, 2), { refreshEditor: false });
-      setStatus('Style updated', 'ready');
-    } catch (error) {
-      setStatus(`Style JSON: ${error.message}`, 'error');
-    }
-    renderLineNumbers();
+    setSource(elements.source.value, { refreshEditor: false });
   });
-  elements.source.addEventListener('scroll', renderLineNumbers);
-
-  document.querySelectorAll('[data-source-tab]').forEach((button) => {
-    button.addEventListener('click', () => {
-      state.sourceTab = button.dataset.sourceTab;
-      document.querySelectorAll('[data-source-tab]').forEach((other) => {
-        const active = other === button;
-        other.classList.toggle('active', active);
-        other.setAttribute('aria-selected', String(active));
-      });
-      syncEditorForTab();
-    });
+  elements.source.addEventListener('scroll', () => {
+    renderLineNumbers();
+    syncHighlightScroll();
   });
 }
 
@@ -552,6 +589,12 @@ function wireCanvas() {
       return;
     }
     selectKey(target.dataset.key, target.dataset.kind);
+  });
+
+  elements.canvas.addEventListener('dblclick', (event) => {
+    if (state.canvasTab === 'table' && event.target.closest('.studio-table')) {
+      openSettings('table');
+    }
   });
 
   [elements.taskList, elements.milestoneList, elements.arrowList].forEach((list) => {
@@ -614,6 +657,7 @@ function wireZoom() {
   $('#zoom-out').addEventListener('click', () => setZoom(state.zoom - 25));
   $('#canvas-zoom').addEventListener('change', (event) => setZoom(Number(event.target.value)));
   $('#zoom-fit').addEventListener('click', () => {
+    if (state.canvasTab !== 'gantt') return;
     const svg = elements.canvas.querySelector('svg');
     if (!svg) return;
     const available = elements.canvas.clientWidth - 44;
@@ -621,6 +665,7 @@ function wireZoom() {
   });
   document.querySelector('.canvas-shell').addEventListener('wheel', (event) => {
     if (!event.ctrlKey && !event.metaKey) return;
+    if (state.canvasTab !== 'gantt') return;
     event.preventDefault();
     setZoom(state.zoom + (event.deltaY < 0 ? 10 : -10));
   }, { passive: false });
@@ -695,8 +740,10 @@ function wireToolbar() {
   $('#add-milestone').addEventListener('click', () => addTask({ milestone: true }));
   $('#add-arrow').addEventListener('click', addArrow);
   $('#format-source').addEventListener('click', () => {
-    if (state.doc) commitDoc();
+    formatSourceAction();
   });
+  $('#chart-settings').addEventListener('click', () => openSettings('general'));
+  $('#close-settings').addEventListener('click', () => elements.settingsDialog.close());
   $('#undo-source').addEventListener('click', undo);
   $('#redo-source').addEventListener('click', redo);
   $('#toggle-arrows').addEventListener('change', (event) => {
@@ -733,14 +780,12 @@ function undo() {
   state.redoStack.push(state.source);
   const previous = state.undoStack.pop();
   setSource(previous, { pushHistory: false });
-  syncEditorForTab();
 }
 
 function redo() {
   if (!state.redoStack.length) return;
   state.undoStack.push(state.source);
   setSource(state.redoStack.pop(), { pushHistory: false });
-  syncEditorForTab();
 }
 
 function wireTheme() {
@@ -822,6 +867,7 @@ async function boot() {
   } catch (error) {
     $('#app-version').textContent = 'web';
   }
+  state.serverFormat = await serverFormattingAvailable();
   setSource(await loadInitialSource(), { pushHistory: false });
 }
 
