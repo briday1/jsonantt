@@ -73,6 +73,32 @@ for (const mode of ['gantt','table','burn','burndown','burnup','burn-table']) {
 }
 console.log('Passed all six exact SVG views and selection.');
 
+load({...base,style:{task_number_start:5}});
+for (const mode of ['gantt','table','burn','burndown','burnup','burn-table']) {
+  pick(mode);
+  const svg=await preview();
+  const target=svg.querySelector('[data-key="tasks.0.tasks.0"]') || svg.querySelector('[data-key="tasks.0"]');
+  assert(target,mode+' offset numbering lost its selection target');
+  assert(svg.querySelector('[id^="studio-task-5"], [id^="studio-series-5"]'));
+  target.dispatchEvent(new window.MouseEvent('click',{bubbles:true}));
+  assert.equal(state.selection.key,target.dataset.key);
+}
+pick('gantt');
+change('number_milestones',true);
+change('milestone_number_start',10);
+change('milestone_prefix','G');
+assert.equal(state.doc.style.milestone_prefix,'G');
+assert((await preview()).outerHTML.includes('G10'));
+change('milestone_prefix','');
+assert.equal(state.doc.style.milestone_prefix,'','Empty prefix must not reset to M');
+assert.equal(q('[data-setting="milestone_prefix"]').placeholder,'No prefix');
+assert(!(await preview()).outerHTML.includes('G10'));
+q('[data-setting="milestone_prefix"]').closest('.setting-control').querySelector('button.color-clear').click();
+assert(!Object.hasOwn(state.doc.style,'milestone_prefix'));
+assert.equal(q('[data-setting="milestone_prefix"]').value,'M');
+assert((await preview()).outerHTML.includes('M10'));
+console.log('Passed offset numbering and selection in all six views, independent milestone numbering, empty prefix and reset.');
+
 for (const mode of ['gantt','table']) {
   for (const bucket of ['tasks','children']) {
     load({tasks:[{name:'Parent',[bucket]:[{name:'Existing',start:'2026-01-01',duration:'4w'}]}]});

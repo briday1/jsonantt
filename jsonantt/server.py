@@ -115,9 +115,8 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
                 if path == '/api/project':
                     if target.suffix.lower() != '.json' or not target.is_file():
                         raise ValueError('Choose an existing JSON file')
-                    source = target.read_text(encoding='utf-8')
-                    from .parser import parse_chart
-                    parse_chart(json.loads(source))
+                    from .composition import load_composed_source
+                    source = load_composed_source(target)
                     result = {'path': str(target), 'source': source}
                 else:
                     entries = sorted((entry for entry in target.iterdir() if not entry.name.startswith('.') and (entry.is_dir() or entry.suffix.lower() == '.json')),
@@ -294,7 +293,8 @@ def serve(
     query = ""
     if json_path:
         server.project_path = Path(json_path).resolve()
-        server.project_json = Path(json_path).read_text(encoding="utf-8")
+        from .composition import load_composed_source
+        server.project_json = load_composed_source(server.project_path)
         query = "?project=1"
     actual_port = server.server_address[1]
     browser_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host

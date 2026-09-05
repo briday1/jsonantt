@@ -81,7 +81,7 @@ export function buildBurn(chart, { field = 'cost', period = 'month', group = '0'
   }
   const numbers = new Map();
   const visit = (tasks, prefix = '') => tasks.forEach((task, index) => {
-    const number = `${prefix}${index + 1}`;
+    const number = `${prefix}${index + (prefix ? 1 : chart.style.task_number_start ?? 1)}`;
     numbers.set(task, number);
     visit(task.children, `${number}.`);
   });

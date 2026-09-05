@@ -42,7 +42,7 @@ export function interactiveChartSvg(text, chart, options, selectedKey = null) {
   if (!options.mode.startsWith('burn')) {
     const tasks = new Map();
     const visit = (items, prefix='') => items.forEach((task,index)=>{
-      const number = `${prefix}${index+1}`;
+      const number = `${prefix}${index+(prefix ? 1 : chart.style.task_number_start ?? 1)}`;
       tasks.set(number,task);
       visit(task.children,`${number}.`);
     });

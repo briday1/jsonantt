@@ -71,7 +71,9 @@ Endpoints
      - Resolved directory, parent, and up to 1,000 visible directories/JSON files.
        Omit path for the startup file's directory or server working directory.
    * - ``GET /api/project?path=/full/path.json``
-     - ``{path, source}``: validated chart source and resolved full path. Read-only.
+     - ``{path, source}``: validated chart source and resolved full path. Includes
+       become editable snapshots (relative directory first, invocation directory
+       second); source files are not changed.
    * - ``GET /api/history?path=/full/path.json``
      - ``{file, revisions, limit}``; latest 200 file commits, newest first.
        Each revision has ``date`` (commit date, ISO 8601), full ``sha``, ``message``, and historical ``path``.
@@ -236,8 +238,10 @@ For file-oriented Python use, ``load_chart`` / ``parse_chart`` plus
 ``render_compare_table``, ``render_burn_chart`` and ``render_burn_table`` remain
 available from ``jsonantt``. Their existing keyword arguments are unchanged.
 For live ``filename`` includes, use ``load_chart(path)`` to resolve referenced files
-relative to that source file, then the file-oriented render functions. Send
-self-contained JSON to HTTP/Pyodide and the GUI; browser uploads do not provide
+relative to that source file first, then the invocation directory, followed by
+the file-oriented render functions. Send self-contained JSON to rendering APIs;
+the GUI's local file opener and uploaded-file composition dialog expand includes
+before rendering. Browser uploads do not provide
 the sibling files or a filesystem base directory for live includes. The composition
 API can instead materialize explicitly provided file contents into one portable document.
 For canonical JSON formatting use ``jsonantt.formatter.format_json_text`` or
@@ -264,7 +268,8 @@ returns a new chart dictionary without mutating input. The equivalent
    }
 
 ``files`` maps relative filenames to complete chart objects; include paths resolve
-relative to the containing virtual file. No files are read from disk. ``append``
+relative to the containing virtual file first, then the file map's root (its
+working directory). No files are read from disk. ``append``
 lists roots in append order (omitting it appends every supplied file). ``wrap``
 creates one parent per root, named after its filename without the extension.
 ``source_name`` supplies the virtual location of the current document if it also

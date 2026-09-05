@@ -15,7 +15,7 @@
         <summary>jsonantt</summary>
         <div class="toolbar-popover">
           <strong>ABOUT</strong>
-          <p class="about-version">Version <span id="app-version">—</span></p>
+          <p class="about-version">PyPI version <span id="app-version">—</span></p>
           <span class="menu-separator"></span>
           <a href="https://github.com/briday1/jsonantt" target="_blank" rel="noopener">Git repository</a>
           <a href="https://pypi.org/project/jsonantt/" target="_blank" rel="noopener">PyPI package</a>
@@ -193,6 +193,19 @@
           </div>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="include-dialog" aria-labelledby="include-title">
+      <div class="settings-dialog-header"><h2 id="include-title">Open composed chart</h2></div>
+      <div class="append-content">
+        <p>Browsers cannot read sibling files automatically. Select the referenced JSON files, or their containing folder to preserve relative paths.</p>
+        <p>Included tasks become editable snapshots. Original files are not changed.</p>
+        <div class="compare-actions"><button id="include-pick" type="button">Select JSON files…</button><button id="include-folder-pick" type="button">Select folder…</button></div>
+        <input id="include-files" type="file" accept=".json,application/json" multiple hidden>
+        <input id="include-folder" type="file" webkitdirectory multiple hidden>
+        <p id="include-status" class="status" role="status"></p>
+        <div class="dialog-actions"><button id="include-close" type="button">Cancel</button><button id="include-confirm" type="button" class="primary" disabled>Open composed chart</button></div>
+      </div>
     </dialog>
 
     <dialog id="append-dialog" aria-labelledby="append-title">

@@ -70,6 +70,18 @@ All fields at a glance
      - Typography
      - ``true``
      - Prefix labels with hierarchy numbers
+   * - ``task_number_start``
+     - Typography
+     - ``1``
+     - Starting top-level task number (non-negative integer); child numbering still starts at 1
+   * - ``milestone_number_start``
+     - Typography
+     - ``1``
+     - Independent starting number when ``number_milestones`` is enabled
+   * - ``milestone_prefix``
+     - Typography
+     - ``"M"``
+     - Prefix for numbered milestones; ``""`` means numbers only
    * - ``background``
      - Colors
      - ``"#FFFFFF"``
@@ -242,6 +254,43 @@ Typography
    * - ``number_tasks``
      - ``true``
      - Prefix task labels with hierarchical numbers (``1``, ``1.1``, ``1.1.1``, …).
+   * - ``task_number_start``
+     - ``1``
+     - Starting top-level number. For ``5``, the hierarchy becomes ``5``, ``5.1``, ``5.2``, ``6``, etc. Applies to Gantt, task tables, burn outputs and comparisons, including CSV. IDs, dependencies, colours and separate ``M1`` milestone numbering are unchanged.
+
+For example, continue numbering after tasks in another document:
+
+.. code-block:: json
+
+   {"style": {"number_tasks": true, "task_number_start": 5}}
+
+Omitting ``task_number_start`` preserves the existing numbering starting at 1.
+The CLI and Python/HTTP APIs read this source setting without new flags. In the
+GUI use **Chart settings → Labels and display → Starting task number**. Filtering
+or rolling up rows does not renumber them. Composed tasks use the destination
+chart's numbering; comparison output keeps the baseline numbers for matched rows.
+
+Milestone numbering is independent. Enable ``number_milestones`` and set
+``milestone_number_start`` (a non-negative integer) and ``milestone_prefix`` (a
+string, including ``""`` for no prefix). For example:
+
+.. code-block:: json
+
+   {
+     "style": {
+       "task_number_start": 5,
+       "number_milestones": true,
+       "milestone_number_start": 10,
+       "milestone_prefix": "G"
+     }
+   }
+
+Tasks start at 5 and milestone labels are ``G10``, ``G11``, etc. Use an empty
+prefix for ``10``, ``11``, etc. Labels are shared by Gantt markers, rolled-up
+milestones, tables, comparisons and exports. Existing milestone-chain and visible
+row counting rules are unchanged. These controls are in **Chart settings →
+Milestones**; clearing the prefix saves an empty string, while Reset restores
+``M``. Defaults remain ``M1``, ``M2``, etc.
 
 Colors
 ------

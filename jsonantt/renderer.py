@@ -863,6 +863,7 @@ def _collect_burn_sources(tasks: List[Task], style: Style, field: str) -> List[D
     palette_index = 0
     lighten_amount = max(0.0, min(100.0, style.subtask_lightening_pct)) / 100.0
     sources: List[Dict[str, Any]] = []
+    first_number = style.validate_task_number_start()
 
     def visit(
         branch: List[Task],
@@ -882,7 +883,7 @@ def _collect_burn_sources(tasks: List[Task], style: Style, field: str) -> List[D
                 color = palette[palette_index % len(palette)]
                 palette_index += 1
 
-            number = number_prefix + str(task_idx + 1)
+            number = number_prefix + str(task_idx + (first_number if depth == 0 else 1))
             ancestor = {
                 "depth": depth,
                 "name": task.name,
@@ -1317,10 +1318,10 @@ def _svg_targets(ax, prefix):
         _tag_svg_artists(ax, previous, prefix)
 
 
-def _studio_task_numbers(tasks, prefix=''):
+def _studio_task_numbers(tasks, prefix='', start=1):
     numbers = {}
     for index, task in enumerate(tasks):
-        number = f'{prefix}{index + 1}'
+        number = f'{prefix}{index + start}'
         numbers[id(task)] = number
         numbers.update(_studio_task_numbers(task.children, number + '.'))
     return numbers
@@ -1421,7 +1422,7 @@ def render_chart(
             _row_band(ax_bar, i, style)
 
     # ---- draw each row ----------------------------------------------------
-    task_numbers = _studio_task_numbers(config.tasks) if interactive else None
+    task_numbers = _studio_task_numbers(config.tasks, start=style.task_number_start) if interactive else None
     for row in rows:
         prefix = f'studio-task-{row.number}'
         with _svg_targets(ax_lbl, prefix + '--label' if interactive else None), \
@@ -2055,7 +2056,7 @@ def _flatten(
             color = palette[palette_index % len(palette)]
             palette_index += 1
 
-        number = number_prefix + str(task_idx + 1)
+        number = number_prefix + str(task_idx + (style.validate_task_number_start() if depth == 0 else 1))
         path_key = path_prefix + (task.name,)
         row = _Row(task=task, depth=depth, row_index=0, color=color, number=number, path_key=path_key)
         if task.children and style.rollup_milestones and not (max_depth_index is None or depth < max_depth_index):
@@ -2104,17 +2105,18 @@ def _collect_descendant_milestones(tasks: List[Task], major_only: bool = False) 
 
 def _assign_row_milestone_labels(rows: List[_Row], style: Style) -> None:
     """Assign sequential milestone labels across visible and rolled-up milestones."""
-    counter = 1
+    style.validate_milestone_numbering()
+    counter = style.milestone_number_start
     for row in rows:
         row.milestone_label = None
         if row.task.milestone and style.number_milestones:
-            row.milestone_label = f"M{counter}"
+            row.milestone_label = f"{style.milestone_prefix}{counter}"
             counter += 1
 
         for overlay in row.rolled_milestones:
             overlay.label = None
             if style.number_milestones:
-                overlay.label = f"M{counter}"
+                overlay.label = f"{style.milestone_prefix}{counter}"
                 counter += 1
 
 

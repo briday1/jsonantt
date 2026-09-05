@@ -58,3 +58,25 @@ assert.equal(composed.tasks[0].name,'phase');
 assert.equal(composed.tasks[0].tasks[0].name,'Imported');
 assert(!JSON.stringify(composed).includes('filename'));
 console.log('Passed WASM portable multi-file composition through the shared Python parser.');
+const missing=JSON.stringify({tasks:[{filename:'child.json'}]});
+assert.throws(()=>engine.render(missing,{mode:'gantt',format:'svg'}),error=>error.message.includes('Missing included file: child.json') && !error.message.includes('/home/pyodide'));
+const relative={document:{tasks:[{filename:'nested/phase.json'}]},files:{
+  'nested/phase.json':{tasks:[{filename:'work.json'},{filename:'fallback.json'}]},
+  'nested/work.json':{tasks:[{name:'Relative first',start:'2026-01-01',duration:'1w'}]},
+  'work.json':{tasks:[{name:'Wrong duplicate',start:'2026-01-01',duration:'1w'}]},
+  'fallback.json':{tasks:[{name:'Working directory fallback',start:'2026-01-01',duration:'1w'}]},
+},append:[]};
+const resolved=JSON.parse(new TextDecoder().decode(engine.render(JSON.stringify(relative),{action:'compose',format:'json'})));
+assert.deepEqual(resolved.tasks.map(task=>task.name),['Relative first','Working directory fallback']);
+console.log('Passed WASM relative-first lookup, working-directory fallback and missing-include errors without virtual OS paths.');
+const numbered=JSON.parse(source);
+Object.assign(numbered.style,{task_number_start:5,milestone_number_start:10,milestone_prefix:'G'});
+for(const mode of ['gantt','table','burn','burndown','burnup','burn-table']) {
+  const svg=new TextDecoder().decode(engine.render(JSON.stringify(numbered),{mode,format:'svg',interactive:true,burn:{group:'leaf'}}));
+  assert(svg.includes(mode.startsWith('burn') ? 'studio-series-5' : 'studio-task-5'));
+  if(!mode.startsWith('burn'))assert(svg.includes('G10'));
+}
+numbered.style.milestone_prefix='';
+const numberedCsv=new TextDecoder().decode(engine.render(JSON.stringify(numbered),{mode:'table',format:'csv',tableFilter:'milestones'}));
+assert(numberedCsv.includes('10,Gate') && !numberedCsv.includes('M10'));
+console.log('Passed WASM offset task numbering, independent milestone start/prefix and numbers-only CSV.');

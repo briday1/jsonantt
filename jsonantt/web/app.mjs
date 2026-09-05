@@ -20,6 +20,9 @@ import { wireLocalFiles } from './local-files.mjs';
 import { readWorkspace, saveWorkspace } from './workspace.mjs';
 import { wireThemeControl } from './theme.mjs';
 import { wireAppend } from './append.mjs';
+import { wirePublishedVersion } from './version.mjs';
+import { wireSourceFiles } from './source-files.mjs';
+import { milestoneDateList } from './milestone-dates.mjs';
 
 const STORAGE_SOURCE = 'jsonantt.source';
 const HISTORY_LIMIT = 100;
@@ -653,17 +656,11 @@ function renderInspector() {
   fragment.append(majorToggle);
 
   if (raw.milestone || raw.major_milestone) {
-    const commitDates = (value) => {
-      const parts = value.split(',').map((part) => part.trim()).filter(Boolean);
-      if (!parts.length) updateRaw(raw, 'date', '');
-      else updateRaw(raw, 'date', parts.length === 1 ? parts[0] : parts);
-    };
-    fragment.append(field('Milestone date(s)', dateInput(
-      Array.isArray(raw.date) ? raw.date.join(', ') : raw.date,
-      commitDates,
-      dateFormat,
-      { multiple: true },
-    ), 'Comma separated for milestone chains; the calendar edits the last date'));
+    fragment.append(field('Milestone dates', milestoneDateList({
+      getValue:()=>taskAtPath(state.doc,task.path).date,
+      format:dateFormat,
+      onChange:value=>updateRaw(taskAtPath(state.doc,task.path),'date',value),
+    }), 'Edit each date or add/remove entries. Source date format and ordering are preserved.'));
   }
 
   const description = document.createElement('textarea');
@@ -1019,16 +1016,13 @@ function wireToolbar() {
     selectKey(null);
   });
   $('#load-source').addEventListener('click', () => $('#source-file').click());
-  $('#source-file').addEventListener('change', async (event) => {
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
+  wireSourceFiles({useServer:()=>state.serverPreview,onOpen:source=>{
     state.projectAttached = false;
     state.projectPath = null;
     comparison.reset();
-    setSource(await file.text());
+    setSource(source);
     selectKey(null);
-    event.target.value = '';
-  });
+  }});
   $('#save-source').addEventListener('click', () => download('chart.json', state.source, 'application/json'));
   $('#export-chart').addEventListener('click', () => {
     $('#export-error').hidden = true;
@@ -1154,6 +1148,7 @@ async function boot() {
   wirePanels();
   wireToolbar();
   wireTheme();
+  wirePublishedVersion($('.about-menu'), $('#app-version'));
   wireKeyboard();
   setExportBackend('browser');
   const staticBuild = document.querySelector('meta[name="jsonantt-static-build"]')?.content;
@@ -1167,10 +1162,9 @@ async function boot() {
       state.launchPath = state.projectPath;
       $('#open-local-file').hidden = !payload.capabilities?.includes('local-files');
       state.serverBurnPreview = payload.capabilities?.includes('burn-preview') === true;
-      if (payload.version) $('#app-version').textContent = payload.version;
     }
   } catch (error) {
-    $('#app-version').textContent = 'web';
+    // Static/offline instances use the browser renderer; PyPI lookup is separate.
   }
   setSource(await loadInitialSource(), { pushHistory: false });
   if (restoredWorkspace) {

@@ -35,7 +35,9 @@ function settingInput(option, value, save) {
   } else {
     if (!multiline) input.type = option.type === 'number' ? 'number' : 'text';
     input.value = multiline ? (value == null ? '' : JSON.stringify(value, null, 2)) : value ?? '';
+    if (option.allowEmpty) input.value = value ?? option.default ?? '';
     input.placeholder = option.default == null ? 'Inherit / default' : multiline ? JSON.stringify(option.default) : String(option.default);
+    if (option.allowEmpty && value === '') input.placeholder = 'No prefix';
     if (multiline) input.rows = option.type === 'columns' ? 5 : 3;
     if (option.type === 'number') {
       input.step = option.step;
@@ -51,6 +53,7 @@ function settingInput(option, value, save) {
       const text = input.value.trim();
       let result;
       if (option.type === 'boolean') result = input.checked;
+      else if (option.allowEmpty) result = input.value;
       else if (!text) result = undefined;
       else if (option.type === 'number') result = Number(text);
       else if (multiline) result = parseArraySetting(text, option.type);

@@ -147,6 +147,22 @@ class Style:
     value_scale: str = 'units'          # units, thousands, millions, billions
     value_decimals: Optional[int] = None  # None = up to two places when opted in
     value_fields: List[str] = field(default_factory=lambda: ['cost'])  # [] applies to all amount fields
+    task_number_start: int = 1       # first top-level hierarchy number; children still start at 1
+    milestone_number_start: int = 1  # independent counter for numbered milestones
+    milestone_prefix: str = 'M'      # empty string gives number-only milestone labels
+
+    def validate_task_number_start(self) -> int:
+        value = self.task_number_start
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError('style.task_number_start must be a non-negative integer')
+        return value
+
+    def validate_milestone_numbering(self) -> None:
+        value = self.milestone_number_start
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError('style.milestone_number_start must be a non-negative integer')
+        if not isinstance(self.milestone_prefix, str):
+            raise ValueError('style.milestone_prefix must be a string (use "" for no prefix)')
 
 
 @dataclass

@@ -14,7 +14,15 @@ export async function loadPythonRenderer({loadPyodide, sourceArchive, indexURL=P
   const module = python.pyimport('jsonantt.browser_renderer');
   return {
     render(source, options) {
-      const result = module.render_json(source, JSON.stringify(options));
+      let result;
+      try { result = module.render_json(source, JSON.stringify(options)); }
+      catch (error) {
+        // Python tracebacks expose the runtime's private /home/pyodide paths.
+        // Present the actual validation error, not those implementation details.
+        const detail=error.message?.split('\n').filter(line=>/^[\w.]+(?:Error|Exception):/.test(line)).at(-1);
+        if (detail) throw new Error(detail);
+        throw error;
+      }
       try { return result.toJs().slice(); }
       finally { result.destroy(); }
     },

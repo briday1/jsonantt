@@ -289,6 +289,14 @@ export function parseChart(data) {
   }
   const dateFormat = data.dateformat || data.date_format || '%Y-%m-%d';
   const style = (data.style && typeof data.style === 'object') ? data.style : {};
+  for (const key of ['task_number_start','milestone_number_start']) {
+    if (Object.hasOwn(style,key) && (!Number.isSafeInteger(style[key]) || style[key] < 0)) {
+      throw new Error(`style.${key} must be a non-negative integer`);
+    }
+  }
+  if (Object.hasOwn(style,'milestone_prefix') && typeof style.milestone_prefix !== 'string') {
+    throw new Error('style.milestone_prefix must be a string (use "" for no prefix)');
+  }
   validateValueFormat(style);
   const tasks = nestedItems(data).map(({ item, key, index }) => parseTask(item, dateFormat, 0, [key, index]));
 

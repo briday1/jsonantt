@@ -9,6 +9,12 @@ but keeps jsonantt's JSON documents as the single source of truth.
 `Open the hosted GUI <https://briday1.github.io/jsonantt/>`_ for browser editing
 without installation. To enable PNG/SVG/CSV exports, run your own local server below.
 
+The **jsonantt → About** menu shows the latest published **PyPI version**, not
+the local development or renderer build version. Opening the menu checks PyPI
+without delaying preview startup; results are cached for one hour. Offline,
+the last checked version remains visible with a cached-status tooltip, or
+``Unavailable`` if no version has been cached.
+
 Running your own local server
 -----------------------------
 
@@ -63,6 +69,21 @@ milestones, or ``?demo=3`` for the cost/burn demo. These also work on the hosted
 Use **File → Open JSON…** to load a document and **File → Save JSON…** to download
 edits. Loading a file with ``jsonantt serve project.json`` does not enable automatic
 writes back to that file.
+
+Composed files follow one search order: resolve each ``filename`` beside the file
+containing that reference first, then from the working directory. For local
+``serve`` and CLI commands, the working directory is where the command was
+launched. **Open local file…** and ``serve composed.json`` load those includes
+automatically. The GUI expands them into editable snapshots without modifying
+the original files.
+
+For browser uploads, **Open JSON…** prompts for missing supporting JSON files or
+the folder containing the source. The selected folder supplies the working
+directory; nested references keep their own relative directories. Browsers cannot
+silently read sibling files from your disk, and never search Pyodide's internal
+``/home/pyodide`` directory. Selecting individual files also allows basename
+matching when the browser does not supply directory information. Use a folder
+when different directories contain files with the same name.
 
 To allow another device on a trusted local network to connect:
 
@@ -243,8 +264,12 @@ Scheduling dependencies are edited with **Not before**; existing arrows remain
 selectable and editable in their own properties.
 Start/end, chart start/end, milestone dates, and fiscal-year start all offer
 calendar popups. Modal settings calendars open above the dialog's scrolling
-content; milestone-chain picking replaces only the last date. Manual typing
-remains available, with dates stored in the source's format (fiscal start uses MM-DD).
+content. Milestone properties show one date per row, each with its own calendar
+and Remove button, plus **Add date**. Adding a row does not change the source
+until a valid date is entered or picked. Manual edits commit on leaving the date
+field. Dates keep their original order and source format (fiscal start uses MM-DD).
+The JSON schema is unchanged: a chain is still a ``date`` array, including when
+only one entry remains. A single date stays a string until another date is added.
 
 Comparing files and Git revisions
 --------------------------------------------------
@@ -325,9 +350,9 @@ Static hosting needs WebAssembly, module workers, and access to the Pyodide CDN
 on first use. The initial runtime/package download can take time and uses more
 memory than the local-server option. If browser support, network policy, or memory
 prevents rendering, the GUI reports the error; use ``jsonantt serve`` instead.
-Use self-contained JSON in the GUI. **File → Append JSON…** can resolve filename
-includes from selected files/folders into editable snapshots. Live filesystem
-links remain a CLI/Python feature (``load_chart`` resolves them relative to the source file).
+The GUI expands filename includes into self-contained editable snapshots when
+opening local files, uploading composed files with their dependencies, or using
+**File → Append JSON…**. Live filesystem links remain a CLI/Python feature.
 
 Appending / composing task files
 ------------------------------------------

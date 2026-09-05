@@ -151,9 +151,7 @@ def _load_included_chart_data(
     seen_files: Set[str],
 ) -> Tuple[Dict[str, Any], str, Set[str]]:
     """Load a nested chart file used to compose tasks across files."""
-    resolved_path = filename if os.path.isabs(filename) else os.path.abspath(
-        os.path.join(source_dir or os.getcwd(), filename)
-    )
+    resolved_path = _resolve_include_path(filename, source_dir)
     if resolved_path in seen_files:
         raise ValueError(f"Circular filename reference detected: {resolved_path}")
 
@@ -161,6 +159,15 @@ def _load_included_chart_data(
         included_data = json.load(fh)
 
     return included_data, os.path.dirname(resolved_path), seen_files | {resolved_path}
+
+
+def _resolve_include_path(filename: str, source_dir: Optional[str]) -> str:
+    """Prefer the referencing file's directory, then the invocation directory."""
+    primary = os.path.abspath(os.path.join(source_dir or os.getcwd(), filename))
+    if os.path.isabs(filename) or os.path.exists(primary):
+        return primary
+    fallback = os.path.abspath(filename)
+    return fallback if os.path.exists(fallback) else primary
 
 
 def _parse_style(data: Dict[str, Any]) -> Style:
@@ -203,6 +210,9 @@ def _parse_style(data: Dict[str, Any]) -> Style:
         "minor_grid_width": "minor_grid_width",
         "bold_tasks": "bold_tasks",
         "number_tasks": "number_tasks",
+        "task_number_start": "task_number_start",
+        "milestone_number_start": "milestone_number_start",
+        "milestone_prefix": "milestone_prefix",
         "table_colorize": "table_colorize",
         "table_show_markers": "table_show_markers",
         "tick_position": "tick_position",
@@ -212,6 +222,8 @@ def _parse_style(data: Dict[str, Any]) -> Style:
         if json_key in data:
             setattr(style, attr, data[json_key])
     validate_value_format(style)
+    style.validate_task_number_start()
+    style.validate_milestone_numbering()
     return style
 
 

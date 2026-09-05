@@ -1,8 +1,41 @@
 """Materialize CLI-style task-file composition into portable, editable JSON."""
 from copy import deepcopy
+import json
+from pathlib import Path
 import posixpath
 
 from .parser import _nested_task_items, _parse_date, parse_chart
+
+
+def load_composed_source(path):
+    """Read local includes into an editable snapshot without changing disk files."""
+    from .parser import _resolve_include_path
+    path = Path(path).resolve()
+    source = path.read_text(encoding='utf-8')
+    document = json.loads(source)
+    files = {}
+
+    def collect(data, owner, seen):
+        found = False
+        for item in _nested_task_items(data):
+            if 'filename' in item:
+                found = True
+                resolved = _resolve_include_path(item['filename'], str(owner.parent))
+                if resolved in seen:
+                    raise ValueError(f'Circular filename reference: {resolved}')
+                included = json.loads(Path(resolved).read_text(encoding='utf-8'))
+                collect(included, Path(resolved), seen | {resolved})
+                files[resolved] = included
+                # Canonical paths preserve the actual choice of fallback directory.
+                item['filename'] = resolved
+            found = collect(item, owner, seen) or found
+        return found
+
+    if collect(document, path, {str(path)}):
+        document = compose_document(document, files, append=[], source_name=str(path))
+        return json.dumps(document, ensure_ascii=False, indent=2) + '\n'
+    parse_chart(document)
+    return source
 
 
 def compose_document(document, files, append=None, wrap=False, source_name=None):
@@ -34,6 +67,11 @@ def compose_document(document, files, append=None, wrap=False, source_name=None)
 
     def load(name, owner, seen):
         key = posixpath.normpath(posixpath.join(posixpath.dirname(owner or ''), name.replace('\\', '/')))
+        # The uploaded file map's root is its working directory, just as the
+        # CLI's invocation directory is the fallback after an owner's directory.
+        working_key = posixpath.normpath(name.replace('\\', '/'))
+        if key not in normalized and working_key in normalized:
+            key = working_key
         if key in seen:
             raise ValueError(f'Circular filename reference: {key}')
         if key not in normalized:

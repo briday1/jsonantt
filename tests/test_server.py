@@ -50,6 +50,9 @@ class TestStaticAssets:
             "python-client.mjs",
             "python-runtime.mjs",
             "python-worker.mjs",
+            "version.mjs",
+            "source-files.mjs",
+            "milestone-dates.mjs",
         ],
     )
     def test_expected_assets_are_packaged(self, name):
@@ -139,6 +142,18 @@ class TestStudioServer:
         assert 'compare-gantt' in data['modes']
         assert 'compare-table' in data['csv_modes']
         assert {'date_line','value_scale','render_depth'} <= set(data['query_parameters'])
+
+    def test_open_local_composed_file(self, running_server, tmp_path):
+        from urllib.parse import urlencode
+        child=tmp_path/'child.json'
+        child.write_text('{"tasks":[{"name":"Imported","start":"2026-01-01","duration":"1w"}]}')
+        source=tmp_path/'composed.json'
+        source.write_text('{"tasks":[{"filename":"child.json"}]}')
+        with urlopen(running_server+'/api/project?'+urlencode({'path':str(source)})) as response:
+            result=json.load(response)
+        assert result['path']==str(source)
+        assert json.loads(result['source'])['tasks'][0]['name']=='Imported'
+        assert 'filename' in source.read_text()
 
     @pytest.mark.parametrize('mode', ['compare-gantt','compare-table'])
     def test_compare_http_exports_and_preview(self, running_server, mode):

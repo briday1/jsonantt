@@ -415,6 +415,10 @@ code { padding: 2px 4px; border-radius: 3px; color: var(--accent); background: v
 .canvas-inspector textarea { resize: vertical; line-height: 1.4; }
 .canvas-inspector input:focus-visible, .canvas-inspector select:focus-visible, .canvas-inspector textarea:focus-visible { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--selection); }
 .inspector-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.milestone-dates { display: grid; gap: 6px; min-width: 0; }
+.milestone-date-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.milestone-date-list li { display: grid; grid-template-columns: 14px minmax(0, 1fr) 25px; align-items: center; gap: 4px; min-width: 0; }
+.milestone-date-list li > button { padding: 5px 0; font-size: 14px; }
 .inspector-switch { display: flex !important; width: fit-content; flex-direction: row; align-items: center; gap: 6px; padding: 2px 0; }
 .inspector-switch input[type="checkbox"] { appearance: none; width: 25px !important; min-height: 14px; height: 14px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); cursor: pointer; transition: border-color .15s ease, background .15s ease; }
 .inspector-switch input[type="checkbox"]::before { content: ""; display: block; width: 8px; height: 8px; margin: 2px; border-radius: 50%; background: var(--muted); transition: translate .15s ease, background .15s ease; }
@@ -558,8 +562,9 @@ code { padding: 2px 4px; border-radius: 3px; color: var(--accent); background: v
 /* ------------------------------------------------------------- date picker */
 #compare-controls { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel); }
 #compare-dialog { width: min(820px, calc(100vw - 40px)); max-height: calc(100vh - 40px); padding: 0; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
-#append-dialog { width: min(700px, calc(100vw - 40px)); max-height: calc(100vh - 40px); padding: 0; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
-#append-dialog::backdrop { background: rgba(15, 23, 32, .45); }
+#append-dialog, #include-dialog { width: min(700px, calc(100vw - 40px)); max-height: calc(100vh - 40px); padding: 0; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
+#append-dialog::backdrop, #include-dialog::backdrop { background: rgba(15, 23, 32, .45); }
+#include-status { overflow-wrap: anywhere; }
 .append-content { display: grid; gap: 12px; padding: 14px; font-size: 12px; }
 #append-list { display: grid; max-height: 40vh; overflow: auto; }
 .append-file { display: flex; align-items: center; gap: 6px; padding: 5px; border-bottom: 1px solid var(--border); }
