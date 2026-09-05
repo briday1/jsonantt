@@ -260,8 +260,8 @@ def main(argv=None) -> int:
         if args.table:
             print("error: --date-line is only supported for chart output", file=sys.stderr)
             return 1
-        if args.burn or args.burndown or args.burnup or args.burn_table:
-            print("error: --date-line is only supported for Gantt chart output", file=sys.stderr)
+        if args.burn_table or (args.burn and args.burn_display == 'spend'):
+            print("error: --date-line is only supported for Gantt, burndown, or burnup chart output", file=sys.stderr)
             return 1
         try:
             line_date = _parse_cli_date(args.date_line, config.date_format)
@@ -297,6 +297,8 @@ def main(argv=None) -> int:
                 group_by=args.burn_group,
                 display_factor=args.burn_display_factor,
                 display='remaining' if args.burndown else 'cumulative' if args.burnup else args.burn_display,
+                date_line=line_date,
+                date_line_color=args.date_line_color,
             )
         elif args.burn_table:
             render_burn_table(

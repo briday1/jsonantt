@@ -28,7 +28,7 @@ export const STYLE_OPTIONS = [
   b('bold_tasks', 'Bold top-level tasks', true, 'Labels and display', 'Gantt and Table. Individual bold overrides still apply.'),
   b('number_tasks', 'Number task labels', true, 'Labels and display', 'Gantt prefixes. The Table Task column is configured through Columns.'),
   b('show_arrows', 'Show dependency arrows', true, 'Labels and display', 'Gantt preview and exports; keeps arrow definitions in the source.'),
-  b('today_marker', "Show today's date", false, 'Labels and display', 'Gantt preview and exports. Visible only when today is in the chart range.'),
+  b('today_marker', "Show today's date", false, 'Labels and display', 'Gantt, burndown and burnup previews/exports. Visible only when today is in the chart range.'),
   s('major_tick', 'Major ticks', null, 'Time axis', ticks, 'Gantt: blank uses years.'),
   s('minor_tick', 'Minor ticks', null, 'Time axis', ticks, 'Gantt: blank uses quarters.'),
   t('fiscal_year_start', 'Fiscal year start', null, 'Time axis', 'Gantt: MM or MM-DD, e.g. 10-01. Blank uses calendar years.'),

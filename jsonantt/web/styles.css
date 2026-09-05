@@ -2,23 +2,24 @@
    jsonantt studio matches its sidebar/canvas look and feel. */
 :root {
   color-scheme: light;
-  --page: #edf2f7;
-  --panel: #ffffff;
+  --page: #eef0f3;
+  --panel: #f8f9fa;
   --surface: #ffffff;
-  --surface-soft: #fbfdff;
-  --canvas: #dce5ee;
-  --canvas-dot: #aabaca;
-  --border: #d8e2ec;
-  --border-strong: #cbd8e4;
+  --surface-soft: #f1f3f5;
+  --canvas: #c7cdd4;
+  --canvas-dot: #aab4bf;
+  --border: #d5dbe2;
+  --border-strong: #bec8d3;
   --text: #243b53;
   --heading: #102a43;
-  --muted: #627d98;
-  --faint: #829ab1;
+  --muted: #576a7d;
+  --faint: #6b7d8f;
   --accent: #2e6ba7;
   --accent-hover: #245886;
   --danger: #c2413d;
   --danger-soft: #fff1f0;
-  --code-bg: #edf5fb;
+  --code-bg: #edf1f5;
+  --source-bg: #fafbfc;
   --selection: rgba(46, 107, 167, .22);
   --shadow: rgba(16, 42, 67, .12);
   color: var(--text);
@@ -46,6 +47,7 @@
   --danger: #f28b82;
   --danger-soft: #3a2224;
   --code-bg: #223241;
+  --source-bg: var(--surface-soft);
   --selection: rgba(112, 175, 231, .28);
   --shadow: rgba(0, 0, 0, .38);
 }
@@ -231,7 +233,7 @@ code { padding: 2px 4px; border-radius: 3px; color: var(--accent); background: v
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 9px;
-  background: var(--surface-soft);
+  background: var(--source-bg);
 }
 .editor-shell::before {
   content: "";
@@ -241,7 +243,7 @@ code { padding: 2px 4px; border-radius: 3px; color: var(--accent); background: v
   width: 43px;
   pointer-events: none;
   border-right: 1px solid var(--border);
-  background: var(--surface-soft);
+  background: var(--source-bg);
 }
 .editor-shell:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--selection); }
 .line-numbers {

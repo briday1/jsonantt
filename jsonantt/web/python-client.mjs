@@ -2,6 +2,11 @@
 let worker, sequence = 0;
 const pending = new Map();
 const MIME = {svg:'image/svg+xml',png:'image/png',csv:'text/csv'};
+let warming;
+export function warmBrowserRenderer() {
+  warming ||= renderInBrowser('',{warmup:true}).catch(()=>{warming=null;});
+  return warming;
+}
 
 export function renderInBrowser(source, options, {signal,onProgress=()=>{}}={}) {
   if (signal?.aborted) return Promise.reject(new DOMException('Cancelled','AbortError'));

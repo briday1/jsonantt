@@ -21,6 +21,10 @@ async function until(check,message) {
   assert.fail(message);
 }
 await until(()=>state.chart,'App did not boot: start jsonantt serve on port 4187');
+assert.equal(q('#format-source'), null, 'Format JSON toolbar button was removed');
+assert(q('#undo-source') && q('#redo-source'));
+assert.equal(q('.new-menu #add-subtask'),null);
+assert.equal(q('.new-menu #add-arrow'),null);
 async function preview() {
   await until(()=>q('#canvas > svg')?.dataset.previewMode===state.canvasTab && q('#canvas').getAttribute('aria-busy')!=='true','Exact preview did not arrive: '+q('#status').textContent);
   assert.equal(q('#canvas img, #canvas canvas, #canvas .studio-table'),null);
@@ -62,15 +66,49 @@ for (const mode of ['gantt','table','burn','burndown','burnup','burn-table']) {
   assert(target,mode+' selection targets');
   target.dispatchEvent(new window.MouseEvent('click',{bubbles:true}));
   assert.equal(state.selection.key,target.dataset.key);
+  assert.equal(q('#canvas > svg'),svg,'Selection must not rebuild the SVG');
   await preview();
   assert(q('#canvas .selected-element'));
   assert.equal(q('#canvas-inspector').hidden,false);
 }
 console.log('Passed all six exact SVG views and selection.');
 
+for (const mode of ['gantt','table']) {
+  for (const bucket of ['tasks','children']) {
+    load({tasks:[{name:'Parent',[bucket]:[{name:'Existing',start:'2026-01-01',duration:'4w'}]}]});
+    pick(mode);
+    (await preview()).querySelector('[data-key="tasks.0"]').dispatchEvent(new window.MouseEvent('click',{bubbles:true}));
+    q('#inspector-add-subtask').click();
+    assert.equal(state.doc.tasks.length,1);
+    assert.equal(state.doc.tasks[0][bucket].length,2);
+    assert.equal(state.selection.key,`tasks.0.${bucket}.1`);
+    assert.equal(state.canvasTab,mode);
+    assert.equal(q('#inspector-content input').value,'New task');
+    q('#undo-source').click();
+    assert.equal(state.doc.tasks[0][bucket].length,1);
+    q('#redo-source').click();
+    assert.equal(state.doc.tasks[0][bucket].length,2);
+    await preview();
+  }
+}
+console.log('Passed contextual subtask creation, child selection, undo/redo and both child schemas in Gantt/table.');
+
+const year=new Date().getFullYear();
+load({style:{today_marker:true},tasks:[{name:'Current work',start:`${year}-01-01`,end:`${year+1}-01-01`,cost:100}]});
+for (const mode of ['burndown','burnup']) {
+  pick(mode);
+  assert((await preview()).querySelector('#chart-date-marker'),mode+' today marker');
+  change('today_marker',false);
+  assert.equal((await preview()).querySelector('#chart-date-marker'),null);
+  change('today_marker',true);
+}
+console.log('Passed burndown/burnup today-marker settings.');
+load(base);
+
 pick('gantt');await preview();
 q('#canvas [id^="studio-arrow-0--"]').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
 assert.equal(state.selection.kind,'arrow');
+assert.equal(q('#inspector-add-subtask'),null,'Arrow properties must not offer subtasks');
 const arrowColor=q('#inspector-content input[type="color"]');
 arrowColor.value='#abcdef';arrowColor.dispatchEvent(new window.Event('input'));
 await preview();
@@ -193,10 +231,10 @@ const frames=[],errors=[];
 let resolveOld;
 const loader=createPreviewLoader({onRender:svg=>frames.push(svg.textContent),onError:message=>errors.push(message)});
 globalThis.fetch=()=>new Promise(resolve=>{resolveOld=resolve;});
-loader.schedule('old',state.chart,{mode:'gantt'},null);
+loader.schedule(JSON.stringify({...base,title:'old'}),state.chart,{mode:'gantt'},null);
 await pause(200);assert(resolveOld);
 globalThis.fetch=async()=>new Response(sample.replace('LABEL','new'));
-loader.schedule('new',state.chart,{mode:'gantt'},null);
+loader.schedule(JSON.stringify({...base,title:'new'}),state.chart,{mode:'gantt'},null);
 await pause(200);
 resolveOld(new Response(sample.replace('LABEL','obsolete')));
 await pause(20);

@@ -7,12 +7,14 @@ import { parseChart, taskAtPath, removeTaskAtPath, taskRelations, formatDate, pa
 import { availableBurnFields, numericAmount } from './burn.mjs';
 import { renderChartSettings } from './settings.mjs';
 import { attachDatePicker } from './datepicker.mjs';
-import { formatSourceText, formatSourceData, serverFormattingAvailable } from './format.mjs';
+import { formatSourceData } from './format.mjs';
 import { exportChart, setExportBackend } from './export.mjs';
 import { highlightJson } from './highlight.mjs';
 import { DEMOS, STARTER } from './demo-charts.mjs';
 import { wireInspectorDrag } from './inspector-drag.mjs';
 import { createPreviewLoader } from './preview.mjs';
+import { createPreviewStore } from './preview-store.mjs';
+import { warmBrowserRenderer } from './python-client.mjs';
 
 const STORAGE_SOURCE = 'jsonantt.source';
 const STORAGE_THEME = 'jsonantt.theme';
@@ -32,7 +34,6 @@ const state = {
   zoom: 100,
   showArrows: true,
   todayMarker: false,
-  serverFormat: null, // null = unknown, boolean once probed
   serverPreview: false,
   serverBurnPreview: false, // Older local servers may support burn views only.
   settingsFocus: 'general',
@@ -59,6 +60,7 @@ const elements = {
 };
 
 const chartPreview = createPreviewLoader({
+  store: createPreviewStore(document.querySelector('meta[name="jsonantt-static-build"]')?.content),
   useBrowser: options => !(state.serverPreview || (state.serverBurnPreview && options.mode.startsWith('burn'))),
   onProgress: message => {
     const loading = elements.canvas.querySelector(':scope > .burn-empty');
@@ -78,10 +80,15 @@ const chartPreview = createPreviewLoader({
   },
   onRender: view => {
     elements.canvas.replaceChildren(view);
+    updateCanvasSelection();
     elements.canvas.setAttribute('aria-busy', 'false');
     elements.canvas.classList.remove('preview-invalid');
     delete elements.canvas.dataset.error;
     applyCanvasZoom();
+    if (!state.serverPreview && !state.serverBurnPreview) {
+      // Paint the cached/bundled SVG first; prepare Python without blocking it.
+      setTimeout(()=>{void warmBrowserRenderer();},500);
+    }
   },
   onError: message => {
     elements.canvas.setAttribute('aria-busy', 'false');
@@ -334,6 +341,12 @@ function renderSettings() {
 
 // ---------------------------------------------------------------- selection
 
+function updateCanvasSelection() {
+  elements.canvas.querySelectorAll('[data-key]').forEach(node=>{
+    node.classList.toggle('selected-element',node.dataset.key === state.selection?.key);
+  });
+}
+
 function selectKey(key, kind) {
   if (!key) {
     state.selection = null;
@@ -343,7 +356,7 @@ function selectKey(key, kind) {
     const task = state.chart ? state.chart.flat.find((entry) => entry.key === key) : null;
     state.selection = task ? { kind: 'task', key, path: task.path } : null;
   }
-  renderCanvas();
+  updateCanvasSelection();
   renderObjects();
   renderInspector();
 }
@@ -434,6 +447,12 @@ function renderInspector() {
   const dateFormat = state.chart.dateFormat;
 
   fragment.append(field('Name', textInput(raw.name || '', (value) => updateRaw(raw, 'name', value))));
+  const addSubtask = document.createElement('button');
+  addSubtask.id = 'inspector-add-subtask';
+  addSubtask.type = 'button';
+  addSubtask.textContent = 'Add subtask';
+  addSubtask.addEventListener('click', () => addTask({ asChild: true }));
+  fragment.append(addSubtask);
   fragment.append(field('ID', textInput(raw.id, (value) => updateRaw(raw, 'id', value)), 'Used by arrows and not_before'));
 
   const cost = textInput(raw.cost, (value, input) => {
@@ -660,6 +679,7 @@ function toast(message) {
 function addTask({ asChild = false, milestone = false } = {}) {
   if (!state.doc) return;
   const parentTask = asChild ? selectedTask() : null;
+  if (asChild && !parentTask) return;
   const parentRaw = parentTask ? parentTask.raw : state.doc;
   const bucketKey = Array.isArray(parentRaw.children) && !Array.isArray(parentRaw.tasks) ? 'children' : 'tasks';
   if (!Array.isArray(parentRaw[bucketKey])) parentRaw[bucketKey] = [];
@@ -668,21 +688,12 @@ function addTask({ asChild = false, milestone = false } = {}) {
   const entry = milestone
     ? { name: 'New milestone', milestone: true, date: iso }
     : { name: 'New task', start: iso, duration: '4w' };
+  const createdPath = [...(parentTask?.path || []), bucketKey, parentRaw[bucketKey].length];
   parentRaw[bucketKey].push(entry);
   commitDoc();
-  const created = state.chart ? state.chart.flat.find((task) => taskAtPath(state.doc, task.path) === entry) : null;
+  const created = state.chart?.flat.find((task) => task.key === createdPath.join('.'));
   if (created) selectKey(created.key, 'task');
-  toast(milestone ? 'Milestone added' : 'Task added');
-}
-
-function addArrow() {
-  if (!state.doc) return;
-  if (!Array.isArray(state.doc.arrows)) state.doc.arrows = [];
-  const ids = state.chart ? state.chart.flat.filter((task) => task.id).map((task) => task.id) : [];
-  state.doc.arrows.push({ from: ids[0] || 'from-id', to: ids[1] || 'to-id' });
-  commitDoc();
-  selectKey(`arrow.${state.doc.arrows.length - 1}`, 'arrow');
-  toast('Arrow added');
+  toast(milestone ? 'Milestone added' : asChild ? 'Subtask added' : 'Task added');
 }
 
 function deleteSelection() {
@@ -765,21 +776,6 @@ function openSettings(focus = 'general') {
   state.settingsFocus = focus;
   renderSettings();
   elements.settingsDialog.showModal();
-}
-
-/** Reformat the source with the canonical (CLI-identical) formatter. */
-async function formatSourceAction() {
-  try {
-    const result = await formatSourceText(state.source, { server: state.serverFormat !== false });
-    if (result.text !== state.source) {
-      setSource(result.text);
-      toast(result.usedServer ? 'Formatted with CLI formatter' : 'Formatted');
-    } else {
-      toast('Already formatted');
-    }
-  } catch (error) {
-    setStatus(`Format: ${error.message}`, 'error');
-  }
 }
 
 // -------------------------------------------------------------------- wiring
@@ -989,12 +985,7 @@ function wireToolbar() {
   });
   $('#save-csv').addEventListener('click', () => exportCanvas('csv'));
   $('#add-task').addEventListener('click', () => addTask());
-  $('#add-subtask').addEventListener('click', () => addTask({ asChild: true }));
   $('#add-milestone').addEventListener('click', () => addTask({ milestone: true }));
-  $('#add-arrow').addEventListener('click', addArrow);
-  $('#format-source').addEventListener('click', () => {
-    formatSourceAction();
-  });
   $('#chart-settings').addEventListener('click', () => openSettings('general'));
   $('#close-settings').addEventListener('click', () => elements.settingsDialog.close());
   $('#undo-source').addEventListener('click', undo);
@@ -1093,9 +1084,10 @@ async function boot() {
   wireTheme();
   wireKeyboard();
   setExportBackend('browser');
+  const staticBuild = document.querySelector('meta[name="jsonantt-static-build"]')?.content;
   try {
-    const response = await fetch('healthz');
-    if (response.ok) {
+    const response = staticBuild ? null : await fetch('healthz');
+    if (response?.ok) {
       const payload = await response.json();
       if (payload.status === 'ok') setExportBackend('server');
       state.serverPreview = payload.capabilities?.includes('chart-preview') === true;
@@ -1105,7 +1097,6 @@ async function boot() {
   } catch (error) {
     $('#app-version').textContent = 'web';
   }
-  state.serverFormat = await serverFormattingAvailable();
   setSource(await loadInitialSource(), { pushHistory: false });
 }
 

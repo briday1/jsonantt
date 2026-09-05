@@ -2,6 +2,7 @@
 import { buildBurn, burnValueFormatter, burnDisplayForMode, burnLineValues } from './burn.mjs';
 import { formatDate } from './model.mjs';
 import { renderInBrowser } from './python-client.mjs';
+import { previewKey } from './preview-store.mjs';
 
 export function interactiveChartSvg(text, chart, options, selectedKey = null) {
   const parsed = new DOMParser().parseFromString(text, 'image/svg+xml');
@@ -91,21 +92,37 @@ export function interactiveChartSvg(text, chart, options, selectedKey = null) {
   return svg;
 }
 
-export function createPreviewLoader({onRender, onError, onPending = () => {}, onProgress = () => {}, useBrowser = () => false}) {
+export function createPreviewLoader({onRender, onError, onPending = () => {}, onProgress = () => {}, useBrowser = () => false, store = null}) {
   let timer, controller, generation = 0;
+  let previousSource;
   const cache = new Map();
   return {
     cancel() { clearTimeout(timer); controller?.abort(); generation++; },
     schedule(source, chart, options, selectedKey) {
       this.cancel();
       const ticket = generation;
-      const key = JSON.stringify([source,options]);
+      const key = previewKey(source,options);
+      const editing = previousSource !== undefined && previousSource !== source;
+      previousSource = source;
       const render = text => {if (ticket === generation) onRender(interactiveChartSvg(text,chart,options,selectedKey));};
       if (cache.has(key)) { render(cache.get(key)); return; }
       onPending(options);
       timer = setTimeout(async()=>{
         controller = new AbortController();
         try {
+          if (store && useBrowser(options)) {
+            const saved = await store.get(key);
+            if (ticket !== generation) return;
+            if (saved) {
+              try {
+                render(saved);
+                cache.set(key,saved);
+                if (cache.size > 6) cache.delete(cache.keys().next().value);
+                void store.put(key,saved);
+                return;
+              } catch {/* Regenerate corrupt cached SVG. */}
+            }
+          }
           let text;
           if (useBrowser(options)) {
             const blob = await renderInBrowser(source, {mode:options.mode,format:'svg',interactive:true,
@@ -134,10 +151,11 @@ export function createPreviewLoader({onRender, onError, onPending = () => {}, on
           cache.set(key,text);
           if (cache.size > 6) cache.delete(cache.keys().next().value);
           render(text);
+          if (store && useBrowser(options)) void store.put(key,text);
         } catch (error) {
           if (error.name !== 'AbortError' && ticket === generation) onError(error.message);
         }
-      },150);
+      },editing ? 150 : 0);
     },
   };
 }

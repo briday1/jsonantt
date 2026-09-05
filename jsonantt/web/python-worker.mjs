@@ -6,12 +6,12 @@ const cancelled = new Set();
 const requests = new Set();
 async function renderer(id) {
   if (!runtime) runtime = (async()=>{
-    const [{loadPyodide}, response] = await Promise.all([
-      import(`${PYODIDE_INDEX}pyodide.mjs`),
-      fetch(new URL('./python/jsonantt.zip', import.meta.url), {cache:'no-cache'}),
-    ]);
-    if (!response.ok) throw new Error('Python renderer bundle is missing. Build the static site with python -m jsonantt.static_site.');
-    return loadPythonRenderer({loadPyodide, sourceArchive:await response.arrayBuffer(),
+    const sourceArchive = fetch(new URL('./python/jsonantt.zip', import.meta.url), {cache:'no-cache'}).then(response=>{
+      if (!response.ok) throw new Error('Python renderer bundle is missing. Build the static site with python -m jsonantt.static_site.');
+      return response.arrayBuffer();
+    });
+    const loadPyodide = async options => (await import(`${PYODIDE_INDEX}pyodide.mjs`)).loadPyodide(options);
+    return loadPythonRenderer({loadPyodide, sourceArchive,
       onProgress:message=>self.postMessage({id, progress:message})});
   })().catch(error=>{runtime=null; throw error;});
   return runtime;
@@ -27,7 +27,7 @@ self.onmessage = ({data}) => {
       // Let pending cancel/new-source messages run before starting CPU work.
       await new Promise(resolve=>setTimeout(resolve,0));
       if (cancelled.has(id)) return;
-      const bytes = engine.render(source,options);
+      const bytes = options.warmup ? new Uint8Array() : engine.render(source,options);
       self.postMessage({id,bytes},[bytes.buffer]);
     } catch (error) {
       self.postMessage({id,error:error.message});

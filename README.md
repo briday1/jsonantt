@@ -181,7 +181,7 @@ jsonantt --burndown project.json burndown.png --burn-period quarter
 jsonantt --burnup project.json burnup.png --burn-period quarter --burn-group leaf --dpi 300
 ```
 
-Use `--date-line` to draw a single vertical reference line on chart outputs. It accepts either a date in the input file's `dateformat` or the special value `today`. Use `--date-line-color` to control its color.
+Use `--date-line` to draw a single vertical reference line on Gantt, burndown, or burnup outputs. It accepts either a date in the input file's `dateformat` or the special value `today`. Use `--date-line-color` to control its color. The source setting `style.today_marker` also enables today's marker in these views, including GUI previews and exports. Burn markers appear only within the plotted date range.
 
 ---
 
@@ -210,8 +210,11 @@ All six previews use the CLI renderer's SVG directly: Gantt, Table, Burn,
 Burndown, Burnup, and Burn table. These are interactive SVG elements—not
 pictures—with task/arrow selection and tooltips. Local instances use Python on
 the server; static hosting runs the same Python sources in a Pyodide worker.
-There is no approximate browser drawing fallback. The first hosted render
-downloads Python, matplotlib, and fonts; later renders reuse the loaded worker.
+There is no approximate browser drawing fallback. Built-in demos ship with exact,
+interactive Python-rendered SVG previews. Previously rendered charts restore from
+a bounded browser cache on refresh, keyed to source, view settings, and renderer
+build. Python warms up in the background for edits and exports; matplotlib downloads
+alongside the interpreter. New uncached charts still need the runtime on first use.
 
 Gantt has view controls for **Rollup depth** and **Roll up milestones**, saved in
 the source and shared with exports. Task Properties includes editable **Cost**
@@ -253,12 +256,12 @@ jsonantt serve --port 8080 --no-browser
   chart's own `dateformat`. A **Relationships** section lists what the entry *depends on*
   (upstream: `not_before`, parent, incoming arrows) and what *depends on it* (downstream:
   subtasks, chained tasks, outgoing arrows). Every related entry is clickable.
-- Add tasks/subtasks/milestones/arrows, undo/redo, zoom, dark mode, and local PNG/SVG/CSV exports.
+- **New** adds a task or milestone; **Add subtask** in task properties creates a child
+  from either Gantt or table view. Set scheduling dependencies with **Not before**;
+  existing arrows remain editable. Undo/redo, zoom, dark mode, and local PNG/SVG/CSV exports are available.
 
-**Formatting parity:** the studio's *Format JSON* button uses the exact same formatter as the
-CLI (`jsonantt fmt`), served over the local `/api/format` endpoint, so saved output is
-byte-for-byte identical either way. When the studio is hosted statically (no local server), a
-matching in-browser implementation (2-space indent, trailing newline) is used instead.
+GUI edits format the source with two-space indentation and a trailing newline.
+For standalone source formatting, use `jsonantt fmt` from the command line.
 
 The hosted GUI supports editing, interactive previews, and PNG/SVG/CSV export
 through Pyodide. Choose **File → Export…** for PNG/SVG and PNG resolution, or
@@ -314,7 +317,8 @@ python -m jsonantt.static_site --output _site
 python -m http.server 8080 --directory _site
 ```
 
-The build bundles the current Python source automatically; do not deploy only
+For immediate first-visit demo previews, build with ``--prerender`` (requires Node.js).
+The Pages workflow enables this automatically. The build bundles the current Python source; do not deploy only
 `jsonantt/web`. The Pages workflow performs this build for every Python or GUI
 change. The browser needs WebAssembly, module workers, and CDN access on first
 load. If those are unavailable, use `jsonantt serve`; no alternate chart style

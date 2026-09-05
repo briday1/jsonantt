@@ -1060,6 +1060,16 @@ def _write_burn_table_csv(burn: Dict[str, Any], output_path: str) -> None:
             writer.writerow(["", "Total"] + [_format_burn_value(value, burn) for value in burn["totals"]])
 
 
+def _burn_date_position(periods, line_date):
+    """Map a date to the line chart's period-boundary coordinates."""
+    if line_date is None:
+        return None
+    for index, bucket in enumerate(periods):
+        if bucket['start'] <= line_date <= bucket['end']:
+            return index + (line_date - bucket['start']).days / (bucket['end'] - bucket['start']).days
+    return None
+
+
 def render_burn_chart(
     config: ChartConfig,
     output_path: str,
@@ -1070,6 +1080,8 @@ def render_burn_chart(
     display_factor: Any = 1,
     display: str = "spend",
     interactive: bool = False,
+    date_line: Optional[date] = None,
+    date_line_color: str = '#C00000',
 ) -> None:
     """Render a funded burn chart from a numeric task field over time buckets."""
     if display not in {"spend", "remaining", "cumulative"}:
@@ -1131,6 +1143,20 @@ def render_burn_chart(
                 for index, bar in enumerate(bars):
                     bar.set_gid(f"studio-series-{series['number']}--bar-{index}")
             bottoms = [bottom + value for bottom, value in zip(bottoms, values)]
+
+    if display in {'remaining', 'cumulative'}:
+        marker_date = date_line or (date.today() if style.today_marker else None)
+        marker_x = _burn_date_position(burn['periods'], marker_date)
+        if marker_x is not None:
+            marker = ax.axvline(marker_x, color=date_line_color, linewidth=2.0,
+                               linestyle='--', alpha=0.95, zorder=2.2)
+            marker.set_gid('chart-date-marker')
+            label = 'Today' if marker_date == date.today() else marker_date.strftime(config.date_format)
+            at_end = marker_x >= len(burn['periods']) - 0.25
+            ax.annotate(label, (marker_x, 1), xycoords=('data', 'axes fraction'),
+                        xytext=(-4 if at_end else 4, -4), textcoords='offset points',
+                        ha='right' if at_end else 'left', va='top', fontsize=max(8, style.font_size - 2),
+                        color=date_line_color, clip_on=True, zorder=5)
 
     ax.set_xticks(x_values)
     ax.set_xticklabels(period_labels, rotation=35, ha="right", fontsize=max(style.font_size - 1, 8))

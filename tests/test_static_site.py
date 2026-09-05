@@ -17,6 +17,29 @@ def test_static_bundle_contains_current_python_sources(tmp_path):
             assert archive.read('jsonantt/' + source.name) == source.read_bytes()
     for name in ('index.html', 'preview.mjs', 'python-worker.mjs', 'python-runtime.mjs', 'python-client.mjs'):
         assert (tmp_path / name).is_file()
+    manifest = json.loads((tmp_path / 'startup-previews.json').read_text())
+    assert manifest['version'] in (tmp_path / 'index.html').read_text()
+    assert len(manifest['version']) == 64
+
+
+def test_prerendered_demos_use_the_shared_renderer(tmp_path):
+    import shutil
+    import matplotlib
+    from tests.test_burn_preview import drawing
+    if not shutil.which('node'):
+        pytest.skip('Node needed to load demo data')
+    with matplotlib.rc_context({'svg.hashsalt':'startup-preview-parity'}):
+        build_site(tmp_path, prerender=True)
+    bundle = json.loads((tmp_path / 'startup-previews.json').read_text())
+    assert len(bundle['previews']) == 3
+    for preview in bundle['previews']:
+        assert '<svg' in preview['svg'] and 'studio-task-' in preview['svg']
+        assert '<image' not in preview['svg']
+        assert preview['options']['mode'] == 'gantt'
+        assert json.loads(preview['source'])['tasks']
+        with matplotlib.rc_context({'svg.hashsalt':'startup-preview-parity'}):
+            expected = render_json(preview['source'], json.dumps({'mode':'gantt','format':'svg','interactive':True})).decode()
+        assert drawing(preview['svg']) == drawing(expected)
 
 
 def test_static_build_rejects_source_directory():

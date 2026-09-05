@@ -29,8 +29,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install the shared renderer
+        run: python -m pip install .
+
       - name: Bundle studio and shared Python renderer
-        run: python jsonantt/static_site.py --output _site
+        run: python -m jsonantt.static_site --output _site --prerender
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

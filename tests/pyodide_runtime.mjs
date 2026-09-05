@@ -31,3 +31,14 @@ assert.throws(()=>engine.render(source,{mode:'gantt',format:'csv'}),/CSV/);
 const rolled = new TextDecoder().decode(engine.render(JSON.stringify({...JSON.parse(source),style:{render_depth:1,rollup_milestones:true}}),{mode:'gantt',format:'svg',interactive:true}));
 assert(rolled.includes('studio-task-1.2--rolled-'));
 console.log('Passed WASM filtering, validation, and rolled-up milestone targeting.');
+const year=new Date().getFullYear();
+const current=JSON.stringify({style:{today_marker:true},tasks:[
+  {name:'Current work',start:`${year}-01-01`,end:`${year+1}-01-01`,cost:100},
+]});
+for (const mode of ['burndown','burnup']) {
+  for (const interactive of [false,true]) {
+    const svg=new TextDecoder().decode(engine.render(current,{mode,format:'svg',interactive}));
+    assert(svg.includes('chart-date-marker') && svg.includes('Today'));
+  }
+}
+console.log('Passed WASM burndown/burnup today markers in preview and export.');

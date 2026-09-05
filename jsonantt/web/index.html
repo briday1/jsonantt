@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="jsonantt-static-build" content="" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Edit jsonantt JSON project files and preview live Gantt and graph views." />
     <link rel="icon" href="data:," />
@@ -39,9 +40,7 @@
           <summary>New</summary>
           <div class="toolbar-popover">
             <button id="add-task" type="button">Task</button>
-            <button id="add-subtask" type="button">Subtask of selection</button>
             <button id="add-milestone" type="button">Milestone</button>
-            <button id="add-arrow" type="button">Dependency arrow</button>
           </div>
         </details>
         <details class="toolbar-menu settings-menu">
@@ -59,7 +58,6 @@
         <span class="toolbar-divider" aria-hidden="true"></span>
         <button class="icon-tool" id="undo-source" type="button" aria-label="Undo" title="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5"></path><path d="M5 12h8a6 6 0 0 1 6 6"></path></svg></button>
         <button class="icon-tool" id="redo-source" type="button" aria-label="Redo" title="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 5 5-5 5"></path><path d="M19 12h-8a6 6 0 0 0-6 6"></path></svg></button>
-        <button class="icon-tool" id="format-source" type="button" aria-label="Format JSON" title="Re-indent the JSON source"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h13"></path></svg></button>
       </nav>
       <input id="source-file" type="file" accept=".json,application/json" hidden />
     </header>

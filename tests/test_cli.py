@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import pytest
 
 from jsonantt.cli import main
 from jsonantt.formatter import format_json_data
@@ -37,6 +38,20 @@ class TestRenderCommand:
         assert main([str(chart_path), str(output)]) == 0
         assert output.is_file()
         assert output.read_text(encoding="utf-8").startswith("<?xml")
+
+    @pytest.mark.parametrize('flags', [
+        ['--burndown'], ['--burnup'], ['--burn', '--burn-display', 'remaining'],
+    ])
+    def test_burn_date_line(self, tmp_path, flags):
+        chart_path = tmp_path / 'budget.json'
+        chart_path.write_text(json.dumps({'tasks': [
+            {'name': 'A', 'start': '2026-01-01', 'end': '2026-06-01', 'cost': 100},
+        ]}))
+        output = tmp_path / 'budget.svg'
+        assert main([str(chart_path), str(output), *flags,
+                     '--date-line', '2026-02-15', '--date-line-color', '#123abc']) == 0
+        assert 'chart-date-marker' in output.read_text()
+        assert '#123abc' in output.read_text()
 
     def test_table_exports_to_png_with_dpi(self, tmp_path):
         chart_path = self._write_chart(tmp_path)
