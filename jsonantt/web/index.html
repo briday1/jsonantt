@@ -31,9 +31,7 @@
             <button id="save-source" type="button">Save JSON…</button>
             <span class="menu-separator"></span>
             <strong>CANVAS (rendered by the jsonantt CLI / matplotlib)</strong>
-            <button id="copy-svg" type="button">Copy SVG</button>
-            <button id="save-svg" type="button">Save SVG…</button>
-            <button id="save-png" type="button">Save PNG…</button>
+            <button id="export-chart" type="button">Export…</button>
             <button id="save-csv" type="button">Save CSV…</button>
           </div>
         </details>
@@ -46,10 +44,6 @@
             <button id="add-arrow" type="button">Dependency arrow</button>
           </div>
         </details>
-        <details class="toolbar-menu examples-menu">
-          <summary>Examples</summary>
-          <div class="toolbar-popover" id="examples-popover"></div>
-        </details>
         <details class="toolbar-menu settings-menu">
           <summary>Settings</summary>
           <div class="toolbar-popover">
@@ -60,8 +54,6 @@
               <span class="theme-moon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5 8.5 8.5 0 1 0 20.5 14.1Z"></path></svg></span>
               <span>Theme</span><small id="theme-value">System</small>
             </button>
-            <label class="menu-setting"><span>Show dependency arrows</span><input id="toggle-arrows" type="checkbox" role="switch" checked /></label>
-            <label class="menu-setting"><span>Today marker</span><input id="toggle-today" type="checkbox" role="switch" /></label>
           </div>
         </details>
         <span class="toolbar-divider" aria-hidden="true"></span>
@@ -95,9 +87,12 @@
           <div class="canvas-tabs" role="tablist" aria-label="Canvas views">
             <button class="active" data-canvas-tab="gantt" role="tab" aria-selected="true">Gantt</button>
             <button data-canvas-tab="table" role="tab" aria-selected="false">Table</button>
+            <button data-canvas-tab="burn" role="tab" aria-selected="false" hidden>Burn</button>
+            <button data-canvas-tab="burndown" role="tab" aria-selected="false" hidden>Burndown</button>
+            <button data-canvas-tab="burnup" role="tab" aria-selected="false" hidden>Burnup</button>
+            <button data-canvas-tab="burn-table" role="tab" aria-selected="false" hidden>Burn table</button>
           </div>
           <div class="preview-meta">
-            <span id="chart-summary"></span>
             <div class="zoom-controls canvas-zoom-controls" aria-label="Canvas zoom">
               <button id="zoom-out" type="button" title="Zoom out">−</button>
               <select id="canvas-zoom" aria-label="Canvas zoom">
@@ -113,18 +108,26 @@
             </div>
           </div>
         </div>
+        <div class="view-options">
+          <div id="gantt-controls">
+            <label>Rollup depth <select id="gantt-depth"><option value="0">All tasks</option></select></label>
+            <label title="Show descendant milestones on visible ancestor rows when depth is limited"><input type="checkbox" id="gantt-rollup-milestones"> Roll up milestones</label>
+          </div>
+          <label id="table-filter-control" hidden>Rows <select id="table-filter"><option value="all">With milestones</option><option value="milestones">Milestones only</option><option value="tasks">No milestones</option></select></label>
+          <div id="burn-controls" hidden>
+            <label>Numeric field <input id="burn-field" value="cost" list="burn-fields" /><datalist id="burn-fields"></datalist></label>
+            <label>Period <select id="burn-period"><option value="day">Day</option><option value="week">Week</option><option value="month" selected>Month</option><option value="quarter">Quarter</option><option value="year">Year</option></select></label>
+            <label>Group <select id="burn-group"><option value="total">Total</option><option value="leaf">Individual tasks</option><option value="0" selected>Top-level tasks</option></select></label>
+            <label>Display multiplier <input id="burn-factor" type="number" step="any" value="1" /></label>
+          </div>
+        </div>
         <div class="canvas-shell" tabindex="0" title="Click an element to select it; Ctrl/⌘ + mouse wheel to zoom">
           <div id="canvas"></div>
           <div class="canvas-toast" id="canvas-toast" role="status" aria-live="polite"></div>
           <section class="canvas-inspector" id="canvas-inspector" hidden aria-label="Properties">
-            <div class="inspector-drag-handle">Properties</div>
+            <div class="inspector-drag-handle" tabindex="0" aria-label="Move Properties: drag or use arrow keys" title="Drag to move within the canvas; arrow keys also move the box"><strong>Properties</strong></div>
             <div id="inspector-content"></div>
-            <div class="inspector-footer">
-              <div class="inspector-footer-row">
-                <button id="delete-selection" class="danger" type="button">Delete</button>
-                <button id="close-inspector" type="button">Close</button>
-              </div>
-            </div>
+            <div class="inspector-footer"><button id="delete-selection" class="danger" type="button">Delete</button><button id="close-inspector" type="button">Close</button></div>
           </section>
         </div>
       </section>
@@ -156,6 +159,37 @@
         <button id="close-settings" type="button" aria-label="Close settings">✕</button>
       </div>
       <div id="settings-content" class="settings-content"></div>
+    </dialog>
+
+    <dialog id="export-dialog" class="compact-dialog" aria-label="Export chart">
+      <form method="dialog" id="export-form">
+        <div class="settings-dialog-header">
+          <h2>Export <span id="export-view-name">Gantt</span></h2>
+          <button value="cancel" type="submit" aria-label="Close export dialog">✕</button>
+        </div>
+        <div class="export-content">
+          <label class="settings-field">Format
+            <select id="export-format">
+              <option value="png">PNG image</option>
+              <option value="svg">SVG vector</option>
+            </select>
+          </label>
+          <label class="settings-field" id="export-dpi-field">Resolution
+            <select id="export-dpi">
+              <option value="96">96 DPI</option>
+              <option value="150" selected>150 DPI</option>
+              <option value="300">300 DPI</option>
+              <option value="600">600 DPI</option>
+            </select>
+          </label>
+          <p class="export-note">Exports use the same matplotlib renderer as the command-line tool.</p>
+          <p id="export-error" role="alert" hidden></p>
+          <div class="dialog-actions">
+            <button value="cancel" type="submit">Cancel</button>
+            <button id="confirm-export" type="button" class="primary">Export</button>
+          </div>
+        </div>
+      </form>
     </dialog>
 
     <script type="module" src="app.mjs"></script>

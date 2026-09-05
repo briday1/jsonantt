@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 import json
@@ -25,6 +26,7 @@ from matplotlib.figure import Figure
 from matplotlib.text import Text
 
 from .models import Arrow, ChartConfig, Style, Task
+from .value_format import format_value, value_format_active, value_unit_label
 
 
 def _milestone_marker(task: Task, style: Style) -> str:
@@ -257,6 +259,9 @@ def _resolve_table_columns(style: Style, include_offset: bool = False) -> List[D
             "total_level": None,
             "display_factor": Decimal("1"),
         })
+    for column in columns:
+        if value_format_active(style, column['field']):
+            column['value_style'] = style
     return columns
 
 
@@ -376,6 +381,8 @@ def _display_numeric_table_value(numeric_value: Dict[str, Any], column: Dict[str
     """Format a numeric table value after applying any display conversion."""
     display_factor = column["display_factor"]
     base_spec = numeric_value.get("spec", numeric_value)
+    if 'value_style' in column:
+        return format_value(numeric_value['amount'] * display_factor, column['value_style'], column['field'], base_spec)
     display_spec = _numeric_display_spec(base_spec, display_factor)
     return _format_numeric_table_value(
         numeric_value["amount"] * display_factor,
@@ -598,7 +605,7 @@ def _build_table_footer_cells(rows, columns: List[Dict[str, Any]], numeric_value
             numeric_value = numeric_value_fn(row, column)
             if numeric_value is None:
                 continue
-            numeric_values.append(numeric_value["spec"])
+            numeric_values.append(numeric_value.get("spec", numeric_value))
             total_amount += numeric_value["amount"]
 
         if not numeric_values:
@@ -610,7 +617,8 @@ def _build_table_footer_cells(rows, columns: List[Dict[str, Any]], numeric_value
 
         display_factor = column["display_factor"]
         footer_spec = _numeric_display_spec(spec, display_factor)
-        footer_cells[index] = _format_numeric_table_value(total_amount * display_factor, footer_spec)
+        footer_cells[index] = (format_value(total_amount * display_factor, column['value_style'], column['field'], spec)
+                               if 'value_style' in column else _format_numeric_table_value(total_amount * display_factor, footer_spec))
         has_total = True
 
     if not has_total:
@@ -945,6 +953,11 @@ def _format_burn_amount(amount: Decimal, spec: Dict[str, Any], display_factor: D
     return _format_numeric_table_value(amount * display_factor, _numeric_display_spec(spec, display_factor))
 
 
+def _format_burn_value(amount, burn):
+    formatted = format_value(amount * burn['display_factor'], burn['style'], burn['field'], burn['spec'])
+    return formatted if formatted is not None else _format_burn_amount(amount, burn['spec'], burn['display_factor'])
+
+
 def _build_burn_matrix(
     config: ChartConfig,
     field: str = "cost",
@@ -990,8 +1003,10 @@ def _build_burn_matrix(
         if series is None:
             series = dict(series_meta)
             series["values"] = [Decimal("0") for _ in periods]
+            series["budget"] = Decimal("0")
             series_map[series_meta["key"]] = series
 
+        series["budget"] += source["amount"]
         duration_days = (source["end"] - source["start"]).days
         if duration_days <= 0:
             duration_days = 1
@@ -1039,10 +1054,10 @@ def _write_burn_table_csv(burn: Dict[str, Any], output_path: str) -> None:
         for series in burn["series"]:
             writer.writerow(
                 [series["number"] + "." if series["number"] and "." not in series["number"] else series["number"], series["name"]]
-                + [_format_burn_amount(value, burn["spec"], burn["display_factor"]) for value in series["values"]]
+                + [_format_burn_value(value, burn) for value in series["values"]]
             )
         if include_footer:
-            writer.writerow(["", "Total"] + [_format_burn_amount(value, burn["spec"], burn["display_factor"]) for value in burn["totals"]])
+            writer.writerow(["", "Total"] + [_format_burn_value(value, burn) for value in burn["totals"]])
 
 
 def render_burn_chart(
@@ -1053,8 +1068,12 @@ def render_burn_chart(
     period: str = "month",
     group_by: Any = 0,
     display_factor: Any = 1,
+    display: str = "spend",
+    interactive: bool = False,
 ) -> None:
     """Render a funded burn chart from a numeric task field over time buckets."""
+    if display not in {"spend", "remaining", "cumulative"}:
+        raise ValueError("burn display must be 'spend', 'remaining', or 'cumulative'")
     burn = _build_burn_matrix(config, field=field, period=period, group_by=group_by, display_factor=display_factor)
     style = config.style
     period_labels = [bucket["label"] for bucket in burn["periods"]]
@@ -1066,14 +1085,39 @@ def render_burn_chart(
     ax.set_facecolor(style.background)
 
     bottoms = [0.0 for _ in x_values]
-    if len(burn["series"]) == 1 and burn["series"][0]["key"] == "__total__":
+    if display in {"remaining", "cumulative"}:
+        for series in burn["series"]:
+            value = sum(series["values"]) if display == "remaining" else Decimal("0")
+            values = [float(value * burn["display_factor"])]
+            for amount in series["values"]:
+                value += -amount if display == "remaining" else amount
+                values.append(float(value * burn["display_factor"]))
+            if display == "remaining" and series["values"]:
+                values[-1] = 0.0
+            line, = ax.plot(list(range(len(values))), values, color=series["color"],
+                    marker="o", markersize=3, label=_burn_series_label(series, style))
+            if interactive:
+                line.set_gid(f"studio-series-{series['number'] or 'total'}--line")
+            if display == "cumulative":
+                budget = float(series["budget"] * burn["display_factor"])
+                budget_line = ax.hlines(budget, 0, len(series["values"]), colors=series["color"],
+                          linestyles=":", linewidth=1.5,
+                          label=f"{_burn_series_label(series, style)} budget")
+                if interactive:
+                    budget_line.set_gid(f"studio-series-{series['number'] or 'total'}--budget")
+        x_values = list(range(len(period_labels) + 1))
+        period_labels = ["Start"] + period_labels
+    elif len(burn["series"]) == 1 and burn["series"][0]["key"] == "__total__":
         series = burn["series"][0]
         values = [float(value * burn["display_factor"]) for value in series["values"]]
-        ax.bar(x_values, values, color=series["color"], width=0.72, edgecolor="white", linewidth=0.8)
+        bars = ax.bar(x_values, values, color=series["color"], width=0.72, edgecolor="white", linewidth=0.8)
+        if interactive:
+            for index, bar in enumerate(bars):
+                bar.set_gid(f'studio-series-total--bar-{index}')
     else:
         for series in burn["series"]:
             values = [float(value * burn["display_factor"]) for value in series["values"]]
-            ax.bar(
+            bars = ax.bar(
                 x_values,
                 values,
                 bottom=bottoms,
@@ -1083,6 +1127,9 @@ def render_burn_chart(
                 linewidth=0.7,
                 label=_burn_series_label(series, style),
             )
+            if interactive:
+                for index, bar in enumerate(bars):
+                    bar.set_gid(f"studio-series-{series['number']}--bar-{index}")
             bottoms = [bottom + value for bottom, value in zip(bottoms, values)]
 
     ax.set_xticks(x_values)
@@ -1090,19 +1137,37 @@ def render_burn_chart(
     ax.grid(axis="y", color=style.grid_color, linewidth=1.0, alpha=0.8)
     ax.set_axisbelow(True)
     ylabel = f"{_default_table_title(field)} per {burn['period'].title()}"
+    if display == "remaining":
+        ylabel = f"Remaining {_default_table_title(field)}"
+    elif display == "cumulative":
+        ylabel = f"Cumulative {_default_table_title(field)}"
+    unit_label = value_unit_label(style, field, burn['spec'])
+    if unit_label:
+        ylabel += f' ({unit_label})'
     ax.set_ylabel(ylabel, fontsize=style.font_size)
 
     display_spec = _numeric_display_spec(burn["spec"], burn["display_factor"])
-    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda value, _: _format_numeric_table_value(Decimal(str(value)), display_spec)))
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda value, _: format_value(value, style, field, burn['spec'])
+                                                    or _format_numeric_table_value(Decimal(str(value)), display_spec)))
 
     title = config.title.strip() if config.title else _default_table_title(field)
-    ax.set_title(f"{title} Burn by {burn['period'].title()}", fontsize=style.font_size + 2, fontweight="bold")
+    suffix = {"remaining": "Burndown (planned)", "cumulative": "Burnup (planned)"}.get(display, f"Burn by {burn['period'].title()}")
+    title = f"{title} {suffix}"
+    ax.set_title(title, fontsize=style.font_size + 2, fontweight="bold")
 
     if len(burn["series"]) > 1:
         ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False, fontsize=max(style.font_size - 1, 8))
         fig.subplots_adjust(right=0.80)
     else:
+        if display == "cumulative":
+            ax.legend(loc="upper left", frameon=False, fontsize=max(style.font_size - 1, 8))
         fig.subplots_adjust(right=0.96)
+
+    if interactive and ax.get_legend() is not None:
+        legend = ax.get_legend()
+        entries = [series for series in burn['series'] for _ in range(2 if display == 'cumulative' else 1)]
+        for index, (text, series) in enumerate(zip(legend.get_texts(), entries)):
+            text.set_gid(f"studio-series-{series['number'] or 'total'}--legend-{index}")
 
     fig.subplots_adjust(left=0.10, bottom=0.22, top=0.88)
     fig.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor=style.background)
@@ -1117,6 +1182,7 @@ def render_burn_table(
     period: str = "month",
     group_by: Any = 0,
     display_factor: Any = 1,
+    interactive: bool = False,
 ) -> None:
     """Render a burn matrix table with period columns and grouped task rows."""
     burn = _build_burn_matrix(config, field=field, period=period, group_by=group_by, display_factor=display_factor)
@@ -1129,14 +1195,14 @@ def render_burn_table(
     for series in burn["series"]:
         number = series["number"] + "." if series["number"] and "." not in series["number"] else series["number"]
         row_cells = [number, series["name"]] + [
-            _format_burn_amount(value, burn["spec"], burn["display_factor"]) for value in series["values"]
+            _format_burn_value(value, burn) for value in series["values"]
         ]
         rows.append((row_cells, False, series["color"]))
 
     include_footer = not (len(burn["series"]) == 1 and burn["series"][0]["key"] == "__total__")
     if include_footer:
         footer_cells = ["", "Total"] + [
-            _format_burn_amount(value, burn["spec"], burn["display_factor"]) for value in burn["totals"]
+            _format_burn_value(value, burn) for value in burn["totals"]
         ]
         rows.append((footer_cells, True, None))
 
@@ -1174,6 +1240,11 @@ def render_burn_table(
             continue
 
         row_cells, is_footer, accent = rows[row_index - 1]
+        if interactive and not is_footer:
+            series = burn['series'][row_index - 1]
+            gid = f"studio-series-{series['number'] or 'total'}--cell-{col_index}"
+            cell.set_gid(gid)
+            cell.get_text().set_gid(gid + '-text')
         if is_footer:
             cell.set_facecolor(header_color)
             cell.set_text_props(weight="bold", color="#111111")
@@ -1205,16 +1276,43 @@ def render_burn_table(
 # ---------------------------------------------------------------------------
 
 
+def _tag_svg_artists(ax, previous, prefix):
+    """Attach interaction IDs to new artists without changing their drawing."""
+    for index, artist in enumerate(child for child in ax.get_children() if child not in previous):
+        if artist.get_gid() is None:
+            artist.set_gid(f'{prefix}-{index}')
+
+
+@contextmanager
+def _svg_targets(ax, prefix):
+    previous = set(ax.get_children()) if prefix else None
+    yield
+    if prefix:
+        _tag_svg_artists(ax, previous, prefix)
+
+
+def _studio_task_numbers(tasks, prefix=''):
+    numbers = {}
+    for index, task in enumerate(tasks):
+        number = f'{prefix}{index + 1}'
+        numbers[id(task)] = number
+        numbers.update(_studio_task_numbers(task.children, number + '.'))
+    return numbers
+
+
 def render_chart(
     config: ChartConfig,
     output_path: str,
     dpi: int = 150,
-    render_depth: int = 0,
+    render_depth: Optional[int] = None,
     date_line: Optional[date] = None,
     date_line_color: str = "#C00000",
+    interactive: bool = False,
 ) -> None:
     """Render *config* to *output_path* (PNG, PDF, SVG …)."""
-    rows = _prepare_rows(config, render_depth)
+    rows = _prepare_rows(config, config.style.render_depth if render_depth is None else render_depth)
+    if date_line is None and config.style.today_marker:
+        date_line = date.today()
 
     n = len(rows)
     style = config.style
@@ -1297,10 +1395,21 @@ def render_chart(
             _row_band(ax_bar, i, style)
 
     # ---- draw each row ----------------------------------------------------
+    task_numbers = _studio_task_numbers(config.tasks) if interactive else None
     for row in rows:
-        _draw_row(ax_lbl, ax_bar, row, n, style, indent_step, left_margin_frac)
+        prefix = f'studio-task-{row.number}'
+        with _svg_targets(ax_lbl, prefix + '--label' if interactive else None), \
+                _svg_targets(ax_bar, prefix + '--shape' if interactive else None):
+            _draw_row(ax_lbl, ax_bar, row, n, style, indent_step, left_margin_frac, task_numbers)
 
-    # ---- dependency arrows (drawing disabled) -----------------------------
+    # ---- dependency arrows -------------------------------------------------
+    # Resolve against the visible rows so render-depth filtering behaves the
+    # same as the interactive preview: an arrow is omitted when either endpoint
+    # is not currently rendered.
+    id_to_row = {row.task.id: row for row in rows if row.task.id}
+    for index, arrow in enumerate(config.arrows if style.show_arrows else []):
+        with _svg_targets(ax_bar, f'studio-arrow-{index}--shape' if interactive else None):
+            _draw_arrow(ax_bar, arrow, id_to_row, style)
 
     # ---- title ------------------------------------------------------------
     if config.title:
@@ -1324,12 +1433,13 @@ def render_table(
     config: ChartConfig,
     output_path: str,
     dpi: int = 150,
-    render_depth: int = 0,
+    render_depth: Optional[int] = None,
     milestones_only: bool = False,
     no_milestones: bool = False,
+    interactive: bool = False,
 ) -> None:
     """Render *config* to *output_path* as a task table image."""
-    rows = _prepare_rows(config, render_depth)
+    rows = _prepare_rows(config, config.style.render_depth if render_depth is None else render_depth)
     rows = _filter_rows_for_table(rows, milestones_only, no_milestones)
     style = config.style
 
@@ -1410,6 +1520,7 @@ def render_table(
     y = 1.3
     visible_row_index = 0
     for row, wrapped_cells, row_units, is_footer in wrapped_rows:
+        previous_artists = set(ax.get_children()) if interactive and not is_footer else None
         band_color = header_color if is_footer else (style.background if visible_row_index % 2 == 0 else style.row_band_color)
 
         ax.add_patch(mpatches.Rectangle(
@@ -1455,6 +1566,8 @@ def render_table(
             )
             cell_text.set_clip_path(clip)
 
+        if previous_artists is not None:
+            _tag_svg_artists(ax, previous_artists, f'studio-task-{row.number}--cell')
         if not is_footer:
             visible_row_index += 1
         y += row_units
@@ -1468,12 +1581,14 @@ def render_compare_chart(
     actual_config: ChartConfig,
     output_path: str,
     dpi: int = 150,
-    render_depth: int = 0,
+    render_depth: Optional[int] = None,
     date_line: Optional[date] = None,
     date_line_color: str = "#C00000",
 ) -> None:
     """Render an outline-vs-actual comparison Gantt chart."""
-    rows = _prepare_compare_rows(planned_config, actual_config, render_depth)
+    rows = _prepare_compare_rows(planned_config, actual_config, planned_config.style.render_depth if render_depth is None else render_depth)
+    if date_line is None and planned_config.style.today_marker:
+        date_line = date.today()
 
     n = len(rows)
     style = planned_config.style
@@ -1571,12 +1686,12 @@ def render_compare_table(
     actual_config: ChartConfig,
     output_path: str,
     dpi: int = 150,
-    render_depth: int = 0,
+    render_depth: Optional[int] = None,
     milestones_only: bool = False,
     no_milestones: bool = False,
 ) -> None:
     """Render a comparison task table with duration or milestone offsets."""
-    rows = _prepare_compare_rows(planned_config, actual_config, render_depth)
+    rows = _prepare_compare_rows(planned_config, actual_config, planned_config.style.render_depth if render_depth is None else render_depth)
     rows = _filter_compare_rows_for_table(rows, milestones_only, no_milestones)
     style = planned_config.style
 
@@ -2360,7 +2475,7 @@ def _row_band(ax, row_index: int, style: Style) -> None:
 
 
 def _draw_row(ax_lbl, ax_bar, row: _Row, n: int, style: Style,
-             indent_step: float = 0.05, left_margin: float = 0.04) -> None:
+             indent_step: float = 0.05, left_margin: float = 0.04, task_numbers=None) -> None:
     task = row.task
     y = row.row_index
 
@@ -2388,7 +2503,7 @@ def _draw_row(ax_lbl, ax_bar, row: _Row, n: int, style: Style,
     else:
         _draw_bar(ax_bar, row, y, style)
 
-    _draw_rolled_up_milestones(ax_bar, row, y, style)
+    _draw_rolled_up_milestones(ax_bar, row, y, style, task_numbers)
 
 
 def _draw_compare_row(
@@ -2498,10 +2613,12 @@ def _draw_compare_milestone(ax_bar, row: _Row, y: float, style: Style, outlined:
     _draw_task_milestone(ax_bar, row.task, y, style, label=row.milestone_label, outlined=outlined)
 
 
-def _draw_rolled_up_milestones(ax_bar, row: _Row, y: float, style: Style) -> None:
+def _draw_rolled_up_milestones(ax_bar, row: _Row, y: float, style: Style, task_numbers=None) -> None:
     """Draw descendant milestones that were rolled up onto a visible row."""
     for overlay in row.rolled_milestones:
-        _draw_task_milestone(ax_bar, overlay.task, y, style, label=overlay.label)
+        prefix = f'studio-task-{task_numbers[id(overlay.task)]}--rolled' if task_numbers else None
+        with _svg_targets(ax_bar, prefix):
+            _draw_task_milestone(ax_bar, overlay.task, y, style, label=overlay.label)
 
 
 def _draw_compare_rolled_milestones(ax_bar, row: _Row, y: float, style: Style, outlined: bool) -> None:
@@ -2821,7 +2938,7 @@ def _draw_arrow(
     id_to_row: dict,
     style: Style,
 ) -> None:
-    """Draw a cubic-bezier S-curve from the end of one task to the start of another."""
+    """Draw the same fixed-offset curve and compact triangular head as the studio SVG."""
     from matplotlib.path import Path
 
     from_row = id_to_row.get(arrow.from_id)
@@ -2839,9 +2956,14 @@ def _draw_arrow(
     x1 = mdates.date2num(to_start)
     y1 = to_row.row_index
 
-    # S-curve: control points at mid-x, anchored horizontally at each end
-    xm = (x0 + x1) / 2.0
-    verts = [(x0, y0), (xm, y0), (xm, y1), (x1, y1)]
+    # The interactive renderer uses 26 CSS-pixel horizontal handles rather
+    # than a midpoint curve. Build in display coordinates, then transform back
+    # to data coordinates so the shape stays identical at every date range.
+    start_px = ax_bar.transData.transform((x0, y0))
+    end_px = ax_bar.transData.transform((x1, y1))
+    control_1 = ax_bar.transData.inverted().transform((start_px[0] + 26.0, start_px[1]))
+    control_2 = ax_bar.transData.inverted().transform((end_px[0] - 26.0, end_px[1]))
+    verts = [(x0, y0), tuple(control_1), tuple(control_2), (x1, y1)]
     codes = [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4]
 
     patch = mpatches.PathPatch(
@@ -2852,6 +2974,24 @@ def _draw_arrow(
         zorder=6,
     )
     ax_bar.add_patch(patch)
+
+    # Browser marker: a 6px-wide triangle with refX=8 in a 10x10 viewBox.
+    # That places the tip 1.2px beyond the path endpoint and the base 4.8px
+    # before it, with a 3px half-height.
+    head_px = [
+        (end_px[0] - 4.8, end_px[1] - 3.0),
+        (end_px[0] + 1.2, end_px[1]),
+        (end_px[0] - 4.8, end_px[1] + 3.0),
+    ]
+    head_data = ax_bar.transData.inverted().transform(head_px)
+    ax_bar.add_patch(mpatches.Polygon(
+        head_data,
+        closed=True,
+        facecolor=arrow.color,
+        edgecolor=arrow.color,
+        linewidth=0,
+        zorder=6.1,
+    ))
 
 
 # ---------------------------------------------------------------------------

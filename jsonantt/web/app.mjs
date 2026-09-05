@@ -3,15 +3,16 @@
  * documents. The JSON source stays the single source of truth: every canvas or
  * inspector interaction rewrites the document and the views re-render from it.
  */
-import { parseChart, taskAtPath, removeTaskAtPath, taskRelations, formatDate, parseDate } from './model.mjs';
-import { renderGantt } from './gantt.mjs';
-import { renderTable } from './table.mjs';
+import { parseChart, taskAtPath, removeTaskAtPath, taskRelations, formatDate, parseDate, applyDuration } from './model.mjs';
+import { availableBurnFields, numericAmount } from './burn.mjs';
 import { renderChartSettings } from './settings.mjs';
 import { attachDatePicker } from './datepicker.mjs';
 import { formatSourceText, formatSourceData, serverFormattingAvailable } from './format.mjs';
-import { exportChart, serverExportAvailable } from './export.mjs';
+import { exportChart, setExportBackend } from './export.mjs';
 import { highlightJson } from './highlight.mjs';
-import { EXAMPLES, STARTER } from './demo-charts.mjs';
+import { DEMOS, STARTER } from './demo-charts.mjs';
+import { wireInspectorDrag } from './inspector-drag.mjs';
+import { createPreviewLoader } from './preview.mjs';
 
 const STORAGE_SOURCE = 'jsonantt.source';
 const STORAGE_THEME = 'jsonantt.theme';
@@ -26,10 +27,14 @@ const state = {
   error: null,
   selection: null, // { kind: 'task' | 'arrow', key, path?, index? }
   canvasTab: 'gantt',
+  tableFilter: 'all',
+  burn: { field: 'cost', period: 'month', group: '0', factor: 1 },
   zoom: 100,
   showArrows: true,
   todayMarker: false,
   serverFormat: null, // null = unknown, boolean once probed
+  serverPreview: false,
+  serverBurnPreview: false, // Older local servers may support burn views only.
   settingsFocus: 'general',
   undoStack: [],
   redoStack: [],
@@ -48,11 +53,47 @@ const elements = {
   taskList: $('#task-list'),
   milestoneList: $('#milestone-list'),
   arrowList: $('#arrow-list'),
-  summary: $('#chart-summary'),
   settingsDialog: $('#settings-dialog'),
   settingsContent: $('#settings-content'),
   main: document.querySelector('main'),
 };
+
+const chartPreview = createPreviewLoader({
+  useBrowser: options => !(state.serverPreview || (state.serverBurnPreview && options.mode.startsWith('burn'))),
+  onProgress: message => {
+    const loading = elements.canvas.querySelector(':scope > .burn-empty');
+    if (loading) loading.textContent = message;
+    else setStatus(message);
+  },
+  onPending: ({mode}) => {
+    elements.canvas.setAttribute('aria-busy', 'true');
+    const current = elements.canvas.querySelector(':scope > svg[data-renderer="python"]');
+    if (current?.dataset.previewMode !== mode) {
+      const loading = document.createElement('p');
+      loading.className = 'burn-empty';
+      loading.setAttribute('role', 'status');
+      loading.textContent = 'Rendering preview…';
+      elements.canvas.replaceChildren(loading);
+    }
+  },
+  onRender: view => {
+    elements.canvas.replaceChildren(view);
+    elements.canvas.setAttribute('aria-busy', 'false');
+    elements.canvas.classList.remove('preview-invalid');
+    delete elements.canvas.dataset.error;
+    applyCanvasZoom();
+  },
+  onError: message => {
+    elements.canvas.setAttribute('aria-busy', 'false');
+    const loading = elements.canvas.querySelector(':scope > .burn-empty');
+    if (loading) loading.textContent = `Renderer preview: ${message}`;
+    else {
+      elements.canvas.classList.add('preview-invalid');
+      elements.canvas.dataset.error = `Renderer preview: ${message}`;
+    }
+    setStatus(`Renderer preview: ${message}`, 'error');
+  },
+});
 
 // --------------------------------------------------------------- source I/O
 
@@ -79,6 +120,13 @@ function compile({ preserveInspector = false } = {}) {
     const doc = JSON.parse(state.source);
     state.doc = doc;
     state.chart = parseChart(doc);
+    state.showArrows = state.chart.style.show_arrows !== false;
+    state.todayMarker = Boolean(state.chart.style.today_marker);
+    const burnFields = availableBurnFields(state.chart);
+    if (burnFields.length && !burnFields.includes(state.burn.field)) {
+      state.burn.field = burnFields.includes('cost') ? 'cost' : burnFields[0];
+      $('#burn-field').value = state.burn.field;
+    }
     state.error = null;
     setStatus(`${state.chart.flat.length} task${state.chart.flat.length === 1 ? '' : 's'} · ${state.chart.arrows.length} arrow${state.chart.arrows.length === 1 ? '' : 's'}`, 'ready');
   } catch (error) {
@@ -128,8 +176,21 @@ function commitDoc({ preserveInspector = false } = {}) {
 // ----------------------------------------------------------------- rendering
 
 function renderCanvas() {
+  chartPreview.cancel();
+  elements.canvas.setAttribute('aria-busy', 'false');
+  const fields = availableBurnFields(state.chart);
+  if (!fields.length && state.canvasTab.startsWith('burn')) state.canvasTab = 'gantt';
+  document.querySelectorAll('[data-canvas-tab]').forEach((button) => {
+    button.hidden = button.dataset.canvasTab.startsWith('burn') && !fields.length;
+    const active = button.dataset.canvasTab === state.canvasTab;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
   const saveCsvButton = document.getElementById('save-csv');
-  if (saveCsvButton) saveCsvButton.hidden = state.canvasTab !== 'table';
+  if (saveCsvButton) saveCsvButton.hidden = !['table', 'burn-table'].includes(state.canvasTab);
+  $('#table-filter-control').hidden = state.canvasTab !== 'table';
+  $('#burn-controls').hidden = !state.canvasTab.startsWith('burn');
+  $('#gantt-controls').hidden = state.canvasTab !== 'gantt';
   if (!state.chart) {
     elements.canvas.classList.add('preview-invalid');
     elements.canvas.dataset.error = state.error || 'Invalid JSON';
@@ -139,26 +200,39 @@ function renderCanvas() {
     selectedKey: state.selection ? state.selection.key : null,
     showArrows: state.showArrows,
     todayMarker: state.todayMarker,
+    tableFilter: state.tableFilter,
   };
-  let view;
-  if (state.canvasTab === 'table') {
-    view = renderTable(state.chart, options);
-    if (state.error) view.classList.add('preview-invalid');
-  } else {
-    view = renderGantt(state.chart, options);
-    view.style.transform = `scale(${state.zoom / 100})`;
+  const depthControl = $('#gantt-depth');
+  const selectedDepth = Number(state.chart.style.render_depth || 0);
+  const depths = Math.max(selectedDepth, ...state.chart.flat.map(task=>task.depth + 1), 1);
+  depthControl.replaceChildren(...Array.from({length:depths + 1}, (_,depth)=>{
+    const option = document.createElement('option');
+    option.value = String(depth);
+    option.textContent = depth === 0 ? 'All tasks' : depth === 1 ? 'Top-level tasks' : `${depth} levels`;
+    return option;
+  }));
+  depthControl.value = String(selectedDepth);
+  $('#gantt-rollup-milestones').checked = Boolean(state.chart.style.rollup_milestones);
+  if (state.canvasTab.startsWith('burn')) {
+    $('#burn-fields').replaceChildren(...fields.map((key) => { const option = document.createElement('option'); option.value = key; return option; }));
+    const group = $('#burn-group');
+    group.querySelectorAll('[data-depth]').forEach((option) => option.remove());
+    const maxDepth = Math.max(0, ...state.chart.flat.map((task) => task.depth));
+    for (let depth = 1; depth <= maxDepth; depth++) {
+      const option = document.createElement('option'); option.value = String(depth); option.dataset.depth = 'true'; option.textContent = `Task depth ${depth}`; group.append(option);
+    }
+    group.value = state.burn.group;
   }
-  elements.canvas.replaceChildren(view);
+  if (!state.error) {
+    const previewOptions = state.canvasTab.startsWith('burn')
+      ? {mode:state.canvasTab, ...state.burn}
+      : {mode:state.canvasTab, tableFilter:state.tableFilter, renderDepth:state.chart.style.render_depth};
+    chartPreview.schedule(state.source, state.chart, previewOptions, options.selectedKey);
+  }
   elements.canvas.classList.toggle('preview-invalid', Boolean(state.error));
   if (state.error) elements.canvas.dataset.error = state.error;
   else delete elements.canvas.dataset.error;
 
-  const chart = state.chart;
-  const dates = chart.flat.map((task) => task.effectiveStart).filter(Boolean);
-  const ends = chart.flat.map((task) => task.effectiveEnd).filter(Boolean);
-  elements.summary.textContent = dates.length && ends.length
-    ? `${formatDate(new Date(Math.min(...dates)), chart.dateFormat)} → ${formatDate(new Date(Math.max(...ends)), chart.dateFormat)}`
-    : '';
 }
 
 function treeItem({ key, title, subtitle, color, selected }) {
@@ -311,7 +385,7 @@ function textInput(value, onChange, { type = 'text', placeholder = '' } = {}) {
 
 function dateInput(value, onChange, dateFormat, { placeholder = '' } = {}) {
   const input = textInput(value, onChange, { placeholder });
-  const wrapper = attachDatePicker(input, { format: dateFormat, onPick: (text) => onChange(text) });
+  const wrapper = attachDatePicker(input, { format: dateFormat, onPick: (text) => { input.value = text; onChange(text, input); } });
   return wrapper || input;
 }
 
@@ -362,21 +436,114 @@ function renderInspector() {
   fragment.append(field('Name', textInput(raw.name || '', (value) => updateRaw(raw, 'name', value))));
   fragment.append(field('ID', textInput(raw.id, (value) => updateRaw(raw, 'id', value)), 'Used by arrows and not_before'));
 
+  const cost = textInput(raw.cost, (value, input) => {
+    const trimmed = value.trim();
+    const plain = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(trimmed);
+    const amount = plain ? Number(trimmed) : trimmed;
+    if (trimmed && numericAmount(amount) === null) {
+      input.setCustomValidity('Enter a numeric amount, optionally with a currency prefix or unit suffix.');
+      return;
+    }
+    input.setCustomValidity('');
+    updateRaw(taskAtPath(state.doc, task.path), 'cost', amount);
+  }, {placeholder:'e.g. 125000 or $125,000'});
+  cost.dataset.field = 'cost';
+  fragment.append(field('Cost', cost, 'Source amount before display scaling. Blank removes the cost.'));
+
+  let startControl;
+  let endControl;
+  let durationControl;
+  const controlInput = (control) => control.matches('input') ? control : control.querySelector('input');
+  const validDate = (value) => {
+    try { return value ? parseDate(value, dateFormat) : null; } catch (error) { return null; }
+  };
+  const commitSynchronized = () => commitDoc({ preserveInspector: true });
+  const setRaw = (key, value) => {
+    if (value === '' || value === null || value === undefined) delete raw[key];
+    else raw[key] = value;
+  };
+  const effectiveStartText = raw.start || (task.effectiveStart ? formatDate(task.effectiveStart, dateFormat) : '');
+  const effectiveEndText = raw.end || (task.effectiveEnd ? formatDate(task.effectiveEnd, dateFormat) : '');
+
+  startControl = dateInput(effectiveStartText, (value) => {
+    setRaw('start', value);
+    const start = validDate(value);
+    if (start && raw.duration) {
+      try {
+        raw.end = formatDate(applyDuration(start, raw.duration), dateFormat);
+        controlInput(endControl).value = raw.end;
+      } catch (error) { /* retain the typed duration until it becomes valid */ }
+    } else if (start && raw.end) {
+      const end = validDate(raw.end);
+      if (end && end >= start) {
+        raw.duration = `${Math.round((end - start) / 86400000)}d`;
+        controlInput(durationControl).value = raw.duration;
+      }
+    }
+    commitSynchronized();
+  }, dateFormat, { placeholder: formatDate(new Date(), dateFormat) });
+  endControl = dateInput(effectiveEndText, (value) => {
+    setRaw('end', value);
+    const start = validDate(raw.start || effectiveStartText);
+    const end = validDate(value);
+    if (start && end && end >= start) {
+      raw.duration = `${Math.round((end - start) / 86400000)}d`;
+      controlInput(durationControl).value = raw.duration;
+    }
+    commitSynchronized();
+  }, dateFormat);
+  durationControl = textInput(raw.duration, (value) => {
+    setRaw('duration', value);
+    const start = validDate(raw.start || effectiveStartText);
+    if (start && value) {
+      try {
+        raw.end = formatDate(applyDuration(start, value), dateFormat);
+        controlInput(endControl).value = raw.end;
+      } catch (error) { /* retain partial input while typing */ }
+    }
+    commitSynchronized();
+  }, { placeholder: '6w' });
+
   const grid = document.createElement('div');
   grid.className = 'inspector-grid';
   grid.append(
-    field('Start', dateInput(raw.start, (value) => updateRaw(raw, 'start', value), dateFormat, { placeholder: formatDate(new Date(), dateFormat) })),
-    field('End', dateInput(raw.end, (value) => updateRaw(raw, 'end', value), dateFormat)),
+    field('Start', startControl),
+    field('End', endControl),
   );
   fragment.append(grid);
 
   const grid2 = document.createElement('div');
   grid2.className = 'inspector-grid';
   grid2.append(
-    field('Duration', textInput(raw.duration, (value) => updateRaw(raw, 'duration', value), { placeholder: '6w' })),
-    field('Not before', textInput(raw.not_before, (value) => updateRaw(raw, 'not_before', value), { placeholder: 'task id' })),
+    field('Duration', durationControl),
   );
   fragment.append(grid2);
+
+  const notBefore = document.createElement('select');
+  const noDependency = document.createElement('option');
+  noDependency.value = '';
+  noDependency.textContent = 'None';
+  notBefore.append(noDependency);
+  state.chart.flat.forEach((candidate) => {
+    if (!candidate.id || candidate.key === task.key) return;
+    const option = document.createElement('option');
+    option.value = candidate.id;
+    option.textContent = `${candidate.id} — ${candidate.name}`;
+    notBefore.append(option);
+  });
+  // Keep an existing source reference visible even if it is unresolved.
+  if (raw.not_before && ![...notBefore.options].some((option) => option.value === raw.not_before)) {
+    const option = document.createElement('option');
+    option.value = raw.not_before;
+    option.textContent = `${raw.not_before} — unavailable`;
+    notBefore.append(option);
+  }
+  notBefore.value = raw.not_before || '';
+  notBefore.addEventListener('change', () => {
+    updateRaw(taskAtPath(state.doc, task.path), 'not_before', notBefore.value);
+    renderInspector();
+  });
+  fragment.append(field('Not before', notBefore, 'Choose a task by ID and name; only its ID is saved.'));
 
   fragment.append(field('Colour', textInput(raw.color || task.resolvedColor || '#4472C4', (value) => updateRaw(raw, 'color', value), { type: 'color' })));
 
@@ -536,45 +703,50 @@ function download(filename, content, type) {
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
+  link.hidden = true;
+  document.body.append(link);
   link.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => {
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, 1000);
 }
 
 /**
- * Export the current canvas tab (gantt or table) via the `jsonantt serve`
- * backend, which renders using the same matplotlib-based code path as the
- * `jsonantt` command-line tool. Requires a running local server; there is no
- * client-side rendering fallback for exported files.
+ * Export through the shared Python renderer, locally or in the Pyodide worker.
  */
 async function exportCanvas(format, { dpi } = {}) {
-  if (!state.source) return;
-  const mode = state.canvasTab === 'table' ? 'table' : 'gantt';
-  if (!(await serverExportAvailable())) {
-    setStatus(
-      `Export requires "jsonantt serve" (or run the jsonantt CLI directly: `
-        + `jsonantt chart.json ${mode === 'table' ? 'table' : 'chart'}.${format})`,
-      'error',
-    );
-    return;
-  }
+  if (!state.source) return false;
+  const source = state.source;
+  const options = canvasExportOptions();
+  const { mode } = options;
   try {
-    const blob = await exportChart(state.source, { mode, format, dpi });
+    const blob = await exportChart(source, { ...options, format, dpi });
     download(`${mode}.${format}`, blob, blob.type);
     toast(`${format.toUpperCase()} exported via CLI renderer`);
+    return true;
   } catch (error) {
     setStatus(`Export: ${error.message}`, 'error');
+    return false;
   }
+}
+
+function canvasExportOptions() {
+  return {
+    mode: state.canvasTab,
+    tableFilter: state.tableFilter,
+    renderDepth: Number(state.chart?.style.render_depth || 0),
+    burn: { ...state.burn },
+  };
 }
 
 async function copyExportedSvg() {
   if (!state.source) return;
-  const mode = state.canvasTab === 'table' ? 'table' : 'gantt';
-  if (!(await serverExportAvailable())) {
-    setStatus('Copy SVG requires "jsonantt serve" running locally', 'error');
-    return;
-  }
+  const source = state.source;
+  const options = canvasExportOptions();
+  const { mode } = options;
   try {
-    const blob = await exportChart(state.source, { mode, format: 'svg' });
+    const blob = await exportChart(source, { ...options, format: 'svg' });
     const text = await blob.text();
     try {
       await navigator.clipboard.writeText(text);
@@ -623,6 +795,26 @@ function wireEditor() {
 }
 
 function wireCanvas() {
+  $('#gantt-depth').addEventListener('change', event => {
+    state.doc.style ||= {};
+    state.doc.style.render_depth = Number(event.target.value);
+    commitDoc({preserveInspector:true});
+  });
+  $('#gantt-rollup-milestones').addEventListener('change', event => {
+    state.doc.style ||= {};
+    state.doc.style.rollup_milestones = event.target.checked;
+    commitDoc({preserveInspector:true});
+  });
+  $('#table-filter').addEventListener('change', (event) => {
+    state.tableFilter = event.target.value;
+    renderCanvas();
+  });
+  for (const [id, key] of [['burn-field', 'field'], ['burn-period', 'period'], ['burn-group', 'group'], ['burn-factor', 'factor']]) {
+    $(`#${id}`).addEventListener('change', (event) => {
+      state.burn[key] = key === 'factor' ? (event.target.value === '' ? NaN : Number(event.target.value)) : event.target.value;
+      renderCanvas();
+    });
+  }
   document.querySelectorAll('[data-canvas-tab]').forEach((button) => {
     button.addEventListener('click', () => {
       state.canvasTab = button.dataset.canvasTab;
@@ -645,8 +837,16 @@ function wireCanvas() {
   });
 
   elements.canvas.addEventListener('dblclick', (event) => {
-    if (state.canvasTab === 'table' && event.target.closest('.studio-table')) {
+    if (state.canvasTab === 'table' && event.target.closest('.studio-table, svg[data-preview-mode="table"]')) {
       openSettings('table');
+    }
+  });
+
+  elements.canvas.addEventListener('keydown', (event) => {
+    const target = event.target.closest('.selectable');
+    if (target && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      selectKey(target.dataset.key, target.dataset.kind);
     }
   });
 
@@ -659,34 +859,14 @@ function wireCanvas() {
 
   $('#close-inspector').addEventListener('click', () => selectKey(null));
   $('#delete-selection').addEventListener('click', deleteSelection);
-  wireInspectorDrag();
 }
 
-/** Let the properties box be dragged around the canvas, as in Pugflow. */
-function wireInspectorDrag() {
-  const handle = elements.inspector.querySelector('.inspector-drag-handle');
-  handle.addEventListener('pointerdown', (event) => {
-    const shell = document.querySelector('.canvas-shell');
-    const box = elements.inspector.getBoundingClientRect();
-    const bounds = shell.getBoundingClientRect();
-    const offsetX = event.clientX - box.left;
-    const offsetY = event.clientY - box.top;
-    handle.setPointerCapture(event.pointerId);
-    const move = (moveEvent) => {
-      const left = Math.max(0, Math.min(bounds.width - box.width, moveEvent.clientX - bounds.left - offsetX));
-      const top = Math.max(0, Math.min(bounds.height - 60, moveEvent.clientY - bounds.top - offsetY));
-      elements.inspector.style.right = 'auto';
-      elements.inspector.style.left = `${left}px`;
-      elements.inspector.style.top = `${top}px`;
-    };
-    const stop = (upEvent) => {
-      handle.releasePointerCapture(upEvent.pointerId);
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', stop);
-    };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', stop);
-  });
+function applyCanvasZoom() {
+  const view = elements.canvas.querySelector('svg, .table-wrap');
+  if (view) {
+    view.style.transform = 'none';
+    view.style.zoom = String(state.zoom / 100);
+  }
 }
 
 function setZoom(value) {
@@ -701,8 +881,7 @@ function setZoom(value) {
     if (!option.parentElement) select.append(option);
   }
   select.value = String(state.zoom);
-  const svg = elements.canvas.querySelector('svg');
-  if (svg) svg.style.transform = `scale(${state.zoom / 100})`;
+  applyCanvasZoom();
 }
 
 function wireZoom() {
@@ -710,21 +889,22 @@ function wireZoom() {
   $('#zoom-out').addEventListener('click', () => setZoom(state.zoom - 25));
   $('#canvas-zoom').addEventListener('change', (event) => setZoom(Number(event.target.value)));
   $('#zoom-fit').addEventListener('click', () => {
-    if (state.canvasTab !== 'gantt') return;
     const svg = elements.canvas.querySelector('svg');
-    if (!svg) return;
+    const table = elements.canvas.querySelector('.table-wrap');
+    if (!svg && !table) return;
     const available = elements.canvas.clientWidth - 44;
-    setZoom((available / Number(svg.getAttribute('width'))) * 100);
+    const intrinsicWidth = svg ? Number(svg.getAttribute('width')) : Number.parseFloat(table.style.width);
+    if (intrinsicWidth) setZoom((available / intrinsicWidth) * 100);
   });
   document.querySelector('.canvas-shell').addEventListener('wheel', (event) => {
     if (!event.ctrlKey && !event.metaKey) return;
-    if (state.canvasTab !== 'gantt') return;
     event.preventDefault();
     setZoom(state.zoom + (event.deltaY < 0 ? 10 : -10));
   }, { passive: false });
 }
 
 function wirePanels() {
+  wireInspectorDrag(elements.inspector, $('.canvas-shell'), $('.inspector-drag-handle'));
   const main = elements.main;
   const toggleSource = $('#toggle-source');
   toggleSource.addEventListener('click', () => {
@@ -774,13 +954,38 @@ function wireToolbar() {
     event.target.value = '';
   });
   $('#save-source').addEventListener('click', () => download('chart.json', state.source, 'application/json'));
-  $('#copy-svg').addEventListener('click', copyExportedSvg);
-  $('#save-svg').addEventListener('click', () => exportCanvas('svg'));
-  $('#save-png').addEventListener('click', () => {
-    const dpiInput = window.prompt('PNG export DPI', '150');
-    if (dpiInput === null) return;
-    const dpi = Math.max(1, Math.round(Number(dpiInput)) || 150);
-    exportCanvas('png', { dpi });
+  $('#export-chart').addEventListener('click', () => {
+    $('#export-error').hidden = true;
+    const viewName = { gantt: 'Gantt', table: 'Table', burn: 'Burn', burndown: 'Burndown', burnup: 'Burnup', 'burn-table': 'Burn table' }[state.canvasTab];
+    $('#export-view-name').textContent = state.canvasTab === 'table'
+      ? `${viewName} — ${$('#table-filter').selectedOptions[0].textContent}` : viewName;
+    $('#export-dialog').showModal();
+  });
+  $('#export-format').addEventListener('change', (event) => {
+    $('#export-dpi-field').hidden = event.target.value !== 'png';
+  });
+  $('#confirm-export').addEventListener('click', async () => {
+    const button = $('#confirm-export');
+    const format = $('#export-format').value;
+    const dpi = Number($('#export-dpi').value);
+    button.disabled = true;
+    button.textContent = 'Exporting…';
+    const error = $('#export-error');
+    error.hidden = true;
+    try {
+      const exported = await exportCanvas(format, { dpi });
+      if (exported) $('#export-dialog').close();
+      else {
+        error.textContent = elements.status.textContent || 'Export failed. Check that jsonantt serve is running.';
+        error.hidden = false;
+      }
+    } catch (failure) {
+      error.textContent = `Export failed: ${failure.message}`;
+      error.hidden = false;
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Export';
+    }
   });
   $('#save-csv').addEventListener('click', () => exportCanvas('csv'));
   $('#add-task').addEventListener('click', () => addTask());
@@ -794,28 +999,6 @@ function wireToolbar() {
   $('#close-settings').addEventListener('click', () => elements.settingsDialog.close());
   $('#undo-source').addEventListener('click', undo);
   $('#redo-source').addEventListener('click', redo);
-  $('#toggle-arrows').addEventListener('change', (event) => {
-    state.showArrows = event.target.checked;
-    renderCanvas();
-  });
-  $('#toggle-today').addEventListener('change', (event) => {
-    state.todayMarker = event.target.checked;
-    renderCanvas();
-  });
-
-  const popover = $('#examples-popover');
-  EXAMPLES.forEach((example) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = example.label;
-    button.addEventListener('click', () => {
-      setSource(JSON.stringify(example.data, null, 2));
-      selectKey(null);
-      toast(`${example.label} loaded`);
-    });
-    popover.append(button);
-  });
-
   document.addEventListener('click', (event) => {
     if (event.target.closest('#settings-dialog')) return;
     document.querySelectorAll('details.toolbar-menu[open]').forEach((menu) => {
@@ -890,6 +1073,8 @@ async function loadInitialSource() {
       /* fall through to stored/starter source */
     }
   }
+  const demo = DEMOS[params.get('demo')];
+  if (demo) return JSON.stringify(demo, null, 2);
   try {
     const stored = localStorage.getItem(STORAGE_SOURCE);
     if (stored) return stored;
@@ -907,10 +1092,14 @@ async function boot() {
   wireToolbar();
   wireTheme();
   wireKeyboard();
+  setExportBackend('browser');
   try {
     const response = await fetch('healthz');
     if (response.ok) {
       const payload = await response.json();
+      if (payload.status === 'ok') setExportBackend('server');
+      state.serverPreview = payload.capabilities?.includes('chart-preview') === true;
+      state.serverBurnPreview = payload.capabilities?.includes('burn-preview') === true;
       if (payload.version) $('#app-version').textContent = payload.version;
     }
   } catch (error) {

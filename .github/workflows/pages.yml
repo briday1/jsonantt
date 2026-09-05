@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - "jsonantt/web/**"
+      - "jsonantt/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -29,13 +29,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Bundle studio and shared Python renderer
+        run: python jsonantt/static_site.py --output _site
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
       - name: Upload studio assets
         uses: actions/upload-pages-artifact@v3
         with:
-          path: jsonantt/web
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment

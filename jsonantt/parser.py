@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .models import Arrow, ChartConfig, Style, Task
+from .value_format import validate_value_format
 
 
 def load_chart(path: str) -> ChartConfig:
@@ -165,6 +166,14 @@ def _load_included_chart_data(
 def _parse_style(data: Dict[str, Any]) -> Style:
     style = Style()
     mapping = {
+        "value_prefix": "value_prefix",
+        "value_suffix": "value_suffix",
+        "value_scale": "value_scale",
+        "value_decimals": "value_decimals",
+        "value_fields": "value_fields",
+        "render_depth": "render_depth",
+        "show_arrows": "show_arrows",
+        "today_marker": "today_marker",
         "width": "width",
         "row_height": "row_height",
         "bar_height": "bar_height",
@@ -202,6 +211,7 @@ def _parse_style(data: Dict[str, Any]) -> Style:
     for json_key, attr in mapping.items():
         if json_key in data:
             setattr(style, attr, data[json_key])
+    validate_value_format(style)
     return style
 
 

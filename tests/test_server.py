@@ -17,6 +17,16 @@ from jsonantt.formatter import format_json_data
 # ---------------------------------------------------------------------------
 
 class TestStaticAssets:
+    def test_milestone_svg_does_not_inherit_chart_background(self):
+        import re
+        css = server.STATIC_ROOT.joinpath('styles.css').read_text()
+        # Chart framing must never apply to SVGs nested inside table rows.
+        assert '#canvas > svg {' in css
+        assert not re.search(r'#canvas\s+svg\s*\{', css)
+        marker_rule = re.search(r'\.table-milestone-marker\s*\{([^}]+)\}', css).group(1)
+        assert 'background: transparent' in marker_rule
+        assert 'box-shadow: none' in marker_rule
+
     def test_static_root_contains_entry_point(self):
         assert server.STATIC_ROOT.joinpath("index.html").is_file()
 
@@ -26,14 +36,20 @@ class TestStaticAssets:
             "styles.css",
             "app.mjs",
             "model.mjs",
-            "gantt.mjs",
-            "table.mjs",
             "settings.mjs",
+            "style-options.mjs",
+            "value-format.mjs",
+            "inspector-drag.mjs",
             "datepicker.mjs",
             "format.mjs",
             "highlight.mjs",
             "demo-charts.mjs",
             "export.mjs",
+            "burn.mjs",
+            "preview.mjs",
+            "python-client.mjs",
+            "python-runtime.mjs",
+            "python-worker.mjs",
         ],
     )
     def test_expected_assets_are_packaged(self, name):
@@ -45,6 +61,9 @@ class TestStaticAssets:
         assert 'data-canvas-tab="table"' in markup
         assert 'data-canvas-tab="graph"' not in markup
         assert 'id="canvas-inspector"' in markup
+        inspector = markup.split('id="canvas-inspector"', 1)[1].split('</section>', 1)[0]
+        assert inspector.index('id="delete-selection"') > inspector.index('id="inspector-content"')
+        assert inspector.index('id="close-inspector"') > inspector.index('id="inspector-content"')
 
     def test_index_has_no_style_source_tab(self):
         markup = server.STATIC_ROOT.joinpath("index.html").read_text(encoding="utf-8")
@@ -55,11 +74,32 @@ class TestStaticAssets:
         assert 'id="chart-settings"' in markup
         assert 'id="settings-dialog"' in markup
         assert 'id="highlight-layer"' in markup
+        assert 'id="export-dialog"' in markup
+        assert 'id="export-dpi"' in markup
+
+    def test_demos_are_url_driven_not_a_toolbar_menu(self):
+        markup = server.STATIC_ROOT.joinpath("index.html").read_text(encoding="utf-8")
+        source = server.STATIC_ROOT.joinpath("app.mjs").read_text(encoding="utf-8")
+        demos = server.STATIC_ROOT.joinpath("demo-charts.mjs").read_text(encoding="utf-8")
+        assert 'examples-popover' not in markup
+        assert "params.get('demo')" in source
+        assert 'description:' in demos
+        assert '1: STARTER, 2: MILESTONE_DEMO, 3: COST_DEMO' in demos
 
     def test_app_wires_table_settings_format_and_highlight_modules(self):
         source = server.STATIC_ROOT.joinpath("app.mjs").read_text(encoding="utf-8")
-        for module in ("table.mjs", "settings.mjs", "format.mjs", "highlight.mjs", "datepicker.mjs"):
+        for module in ("preview.mjs", "settings.mjs", "format.mjs", "highlight.mjs", "datepicker.mjs"):
             assert module in source
+        assert 'applyDuration' in source
+        assert 'commitSynchronized' in source
+
+    def test_chart_display_options_live_in_chart_settings(self):
+        markup = server.STATIC_ROOT.joinpath("index.html").read_text(encoding="utf-8")
+        settings = server.STATIC_ROOT.joinpath("style-options.mjs").read_text(encoding="utf-8")
+        assert 'id="toggle-arrows"' not in markup
+        assert 'id="toggle-today"' not in markup
+        assert 'Show dependency arrows' in settings
+        assert "Show today's date" in settings
 
     def test_styles_cover_table_settings_highlight_and_datepicker(self):
         css = server.STATIC_ROOT.joinpath("styles.css").read_text(encoding="utf-8")
@@ -90,6 +130,47 @@ class TestStudioServer:
             payload = json.loads(response.read().decode("utf-8"))
         assert payload["status"] == "ok"
         assert payload["version"]
+        assert 'burn-preview' in payload['capabilities']
+        assert 'chart-preview' in payload['capabilities']
+
+    @pytest.mark.parametrize('mode', ['burn', 'burndown', 'burnup', 'burn-table'])
+    def test_interactive_burn_preview_endpoint(self, running_server, mode):
+        from tests.test_burn_preview import SOURCE
+        request = Request(f'{running_server}/api/preview?mode={mode}&burn_period=quarter&burn_group=leaf',
+                          data=json.dumps(SOURCE).encode(), headers={'Content-Type': 'application/json'})
+        with urlopen(request) as response:
+            assert response.headers['Content-Type'].startswith('image/svg+xml')
+            svg = response.read().decode()
+        assert 'studio-series-1.1--' in svg
+        assert 'studio-series-2--' in svg
+        assert '<image' not in svg
+        if mode == 'burnup':
+            assert 'studio-series-1.1--budget' in svg
+
+    @pytest.mark.parametrize('mode,query,expected,excluded', [
+        ('gantt', '', 'studio-arrow-0--shape-', ''),
+        ('gantt', '&render_depth=1', 'studio-task-1.2--rolled-', 'studio-arrow-0--'),
+        ('table', '', 'studio-task-1.1--cell-', ''),
+        ('table', '&table_filter=milestones', 'studio-task-1.2--cell-', 'studio-task-1.1--'),
+        ('table', '&table_filter=tasks', 'studio-task-1.1--cell-', 'studio-task-1.2--'),
+    ])
+    def test_gantt_table_preview_endpoint(self, running_server, mode, query, expected, excluded):
+        from tests.test_burn_preview import CHART_SOURCE
+        request = Request(f'{running_server}/api/preview?mode={mode}{query}', data=json.dumps(CHART_SOURCE).encode())
+        with urlopen(request) as response:
+            assert response.headers['Content-Type'].startswith('image/svg+xml')
+            svg = response.read().decode()
+            if mode == 'table':
+                assert response.headers['X-Jsonantt-Table-Filter']
+        assert expected in svg
+        assert not excluded or excluded not in svg
+        assert '<image' not in svg
+
+    def test_preview_rejects_unknown_mode(self, running_server):
+        request = Request(f'{running_server}/api/preview?mode=unknown', data=b'{}')
+        with pytest.raises(HTTPError) as error:
+            urlopen(request)
+        assert error.value.code == 400
 
     def test_index_is_served(self, running_server):
         with urlopen(f"{running_server}/index.html") as response:
@@ -161,6 +242,24 @@ class TestExportEndpoint:
             body = response.read()
         assert body.startswith(b"<?xml")
 
+    def test_gantt_svg_export_includes_colored_dependency_arrow_and_head(self, running_server):
+        source = json.dumps({
+            "tasks": [
+                {"id": "a", "name": "A", "start": "2026-01-01", "end": "2026-02-01"},
+                {"id": "b", "name": "B", "start": "2026-02-15", "end": "2026-03-01"},
+            ],
+            "arrows": [{"from": "a", "to": "b", "color": "#12AB34"}],
+        })
+        request = Request(
+            f"{running_server}/api/export?mode=gantt&format=svg",
+            data=source.encode("utf-8"),
+            method="POST",
+        )
+        with urlopen(request) as response:
+            body = response.read().decode("utf-8").lower()
+        # Matplotlib emits the curve and arrowhead separately with the same color.
+        assert body.count("#12ab34") >= 2
+
     def test_table_png_export(self, running_server):
         with self._post(running_server, "table", "png") as response:
             assert response.headers["Content-Type"] == "image/png"
@@ -204,6 +303,120 @@ class TestExportEndpoint:
         with pytest.raises(HTTPError) as excinfo:
             urlopen(request)
         assert excinfo.value.code == 400
+
+
+class TestCanvasViewExports:
+    SOURCE = {
+        'tasks': [
+            {'name': 'Work', 'start': '2026-01-01', 'end': '2026-03-01', 'cost': 600, 'effort': 30},
+            {'name': 'Gate', 'milestone': True, 'date': '2026-03-15', 'cost': 60, 'effort': 3},
+        ],
+    }
+
+    @pytest.mark.parametrize('filter_name,names', [
+        ('all', ['Work', 'Gate']), ('milestones', ['Gate']), ('tasks', ['Work']),
+    ])
+    def test_table_csv_uses_canvas_filter(self, running_server, filter_name, names):
+        import csv
+        import io
+        request = Request(f'{running_server}/api/export?mode=table&format=csv&table_filter={filter_name}',
+                          data=json.dumps(self.SOURCE).encode(), method='POST')
+        with urlopen(request) as response:
+            assert response.headers['X-Jsonantt-Table-Filter'] == filter_name
+            rows = list(csv.DictReader(io.StringIO(response.read().decode())))
+        assert [row['Name'] for row in rows] == names
+
+    @pytest.mark.parametrize('filter_name,flag', [
+        ('all', None), ('milestones', '--milestones-only'), ('tasks', '--no-milestones'),
+    ])
+    def test_table_png_filter_matches_cli(self, running_server, tmp_path, filter_name, flag):
+        from jsonantt.cli import main
+        request = Request(f'{running_server}/api/export?mode=table&format=png&dpi=80&table_filter={filter_name}',
+                          data=json.dumps(self.SOURCE).encode(), method='POST')
+        with urlopen(request) as response:
+            assert response.headers['X-Jsonantt-Table-Filter'] == filter_name
+            actual = response.read()
+        source = tmp_path / 'source.json'
+        source.write_text(json.dumps(self.SOURCE))
+        target = tmp_path / 'expected.png'
+        args = [str(source), str(target), '--table', '--dpi', '80']
+        if flag:
+            args.append(flag)
+        assert main(args) == 0
+        assert actual == target.read_bytes()
+
+    @pytest.mark.parametrize('filter_name,names,absent', [
+        ('all', ['Work', 'Gate'], []), ('milestones', ['Gate'], ['Work']), ('tasks', ['Work'], ['Gate']),
+    ])
+    def test_table_svg_filter(self, running_server, filter_name, names, absent):
+        request = Request(f'{running_server}/api/export?mode=table&format=svg&table_filter={filter_name}',
+                          data=json.dumps(self.SOURCE).encode(), method='POST')
+        with urlopen(request) as response:
+            svg = response.read().decode()
+        for name in names:
+            assert f'<!-- {name} -->' in svg
+        for name in absent:
+            assert f'<!-- {name} -->' not in svg
+
+    def test_table_export_honors_canvas_depth(self, running_server):
+        source = {'tasks': [{'name': 'Parent', 'tasks': self.SOURCE['tasks']}]}
+        request = Request(f'{running_server}/api/export?mode=table&format=csv&render_depth=1',
+                          data=json.dumps(source).encode(), method='POST')
+        with urlopen(request) as response:
+            csv = response.read().decode()
+        assert 'Parent' in csv
+        assert 'Work' not in csv
+        assert 'Gate' not in csv
+
+    @pytest.mark.parametrize('depth', ['-1', '1.5', 'invalid'])
+    def test_invalid_export_depth(self, running_server, depth):
+        request = Request(f'{running_server}/api/export?mode=table&format=png&render_depth={depth}',
+                          data=json.dumps(self.SOURCE).encode(), method='POST')
+        with pytest.raises(HTTPError) as excinfo:
+            urlopen(request)
+        assert excinfo.value.code == 400
+
+    def test_burn_csv_forwards_field_period_group_and_scale(self, running_server, tmp_path):
+        from jsonantt.parser import parse_chart
+        from jsonantt.renderer import render_burn_table
+        request = Request(f'{running_server}/api/export?mode=burn-table&format=csv&burn_field=effort&burn_period=quarter&burn_group=total&burn_factor=2',
+                          data=json.dumps(self.SOURCE).encode(), method='POST')
+        with urlopen(request) as response:
+            actual = response.read()
+        target = tmp_path / 'expected.csv'
+        render_burn_table(parse_chart(self.SOURCE), str(target), field='effort', period='quarter', group_by='total', display_factor=2)
+        assert actual == target.read_bytes()
+
+    @pytest.mark.parametrize('display', ['spend', 'remaining', 'cumulative'])
+    def test_burn_png_matches_cli(self, running_server, tmp_path, display):
+        from jsonantt.cli import main
+        request = Request(f'{running_server}/api/export?mode=burn&format=png&dpi=80&burn_field=effort&burn_period=quarter&burn_group=total&burn_factor=2&burn_display={display}',
+                          data=json.dumps(self.SOURCE).encode(), method='POST')
+        with urlopen(request) as response:
+            actual = response.read()
+        source = tmp_path / 'chart.json'
+        source.write_text(json.dumps(self.SOURCE))
+        target = tmp_path / 'chart.png'
+        assert main([str(source), str(target), '--burn', '--dpi', '80', '--burn-field', 'effort', '--burn-period', 'quarter', '--burn-group', 'total', '--burn-display-factor', '2', '--burn-display', display]) == 0
+        assert actual == target.read_bytes()
+
+    @pytest.mark.parametrize('mode', ['burndown', 'burnup'])
+    @pytest.mark.parametrize('format', ['png', 'svg'])
+    def test_separate_burn_views_export(self, running_server, tmp_path, mode, format):
+        from jsonantt.cli import main
+        request = Request(f'{running_server}/api/export?mode={mode}&format={format}&dpi=80&burn_period=quarter&burn_group=total',
+                          data=json.dumps(self.SOURCE).encode(), method='POST')
+        with urlopen(request) as response:
+            assert f'{mode}.{format}' in response.headers['Content-Disposition']
+            actual = response.read()
+        if format == 'svg':
+            assert mode.capitalize().encode() in actual
+        else:
+            source = tmp_path / 'chart.json'
+            source.write_text(json.dumps(self.SOURCE))
+            target = tmp_path / 'chart.png'
+            assert main([str(source), str(target), f'--{mode}', '--dpi', '80', '--burn-period', 'quarter', '--burn-group', 'total']) == 0
+            assert actual == target.read_bytes()
 
 
 class TestFormatEndpoint:

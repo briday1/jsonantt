@@ -1,13 +1,15 @@
 /**
  * Studio image/table export.
  *
- * Exports are *always* produced by the local `jsonantt serve` backend calling
- * straight into `jsonantt.renderer` — the exact matplotlib-based code path the
- * `jsonantt` command-line tool uses. There is deliberately no client-side (DOM
- * SVG / canvas) rendering fallback for exported files: under static hosting
- * (no local server) export is unavailable and callers should direct users to
- * run `jsonantt serve` or the `jsonantt` CLI instead.
+ * Exports always use jsonantt.renderer, either through the local server or
+ * through Pyodide in a worker on static hosts. No DOM screenshot renderer.
  */
+
+import { burnDisplayForMode } from './burn.mjs';
+import { renderInBrowser } from './python-client.mjs';
+
+let backend = 'server';
+export function setExportBackend(value) { backend = value; }
 
 /** True when the local `jsonantt serve` backend is reachable. */
 export async function serverExportAvailable() {
@@ -25,13 +27,23 @@ export async function serverExportAvailable() {
  *
  * @param {string} source - Raw JSON chart document text.
  * @param {Object} options
- * @param {'gantt'|'table'|'burn'|'burn-table'} options.mode
+ * @param {'gantt'|'table'|'burn'|'burndown'|'burnup'|'burn-table'} options.mode
  * @param {'png'|'svg'|'csv'} options.format
  * @param {number} [options.dpi] - Raster DPI (png only).
  * @returns {Promise<Blob>} the rendered file contents.
  */
-export async function exportChart(source, { mode, format, dpi = 150 } = {}) {
+export async function exportChart(source, { mode, format, dpi = 150, tableFilter = 'all', renderDepth = 0, burn = {} } = {}) {
+  if (backend === 'browser') return renderInBrowser(source, {mode,format,dpi,tableFilter,renderDepth,burn});
   const params = new URLSearchParams({ mode, format, dpi: String(dpi) });
+  if (mode === 'table' || mode === 'gantt') params.set('render_depth', String(renderDepth));
+  if (mode === 'table') params.set('table_filter', tableFilter);
+  if (mode?.startsWith('burn')) {
+    params.set('burn_field', burn.field ?? 'cost');
+    params.set('burn_period', burn.period ?? 'month');
+    params.set('burn_group', burn.group ?? '0');
+    params.set('burn_factor', String(burn.factor ?? 1));
+    params.set('burn_display', mode === 'burn' ? (burn.display ?? 'spend') : burnDisplayForMode(mode));
+  }
   const response = await fetch(`/api/export?${params.toString()}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -45,7 +57,14 @@ export async function exportChart(source, { mode, format, dpi = 150 } = {}) {
     } catch (error) {
       /* keep the generic message */
     }
+    if (message.includes('unknown export mode')) message += '. Restart jsonantt serve from the updated installation and refresh the page.';
     throw new Error(message);
   }
-  return response.blob();
+  if (mode === 'table' && tableFilter !== 'all'
+      && response.headers.get('X-Jsonantt-Table-Filter') !== tableFilter) {
+    throw new Error('The server did not confirm the selected table rows. Restart jsonantt serve from the updated installation, then refresh the page and export again.');
+  }
+  const blob = await response.blob();
+  if (!blob.size || blob.type.includes('text/html')) throw new Error('The server did not return an exported file. Run the updated jsonantt serve server and try again.');
+  return blob;
 }

@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 
 STATIC_ROOT = Path(__file__).resolve().with_name("web")
+_RENDER_LOCK = threading.RLock()  # Matplotlib is shared by preview/export threads.
 
 _EXPORT_CONTENT_TYPES = {
     "png": "image/png",
@@ -24,7 +25,7 @@ _EXPORT_CONTENT_TYPES = {
 # header free of any request-controlled data.
 _EXPORT_FILENAMES = {
     (mode, fmt): f"{mode}.{fmt}"
-    for mode in ("gantt", "table", "burn", "burn-table")
+    for mode in ("gantt", "table", "burn", "burndown", "burnup", "burn-table")
     for fmt in ("png", "svg", "csv")
 }
 
@@ -48,7 +49,7 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
 
         path = urlsplit(self.path).path
         if path == "/healthz":
-            payload = json.dumps({"status": "ok", "version": __version__})
+            payload = json.dumps({"status": "ok", "version": __version__, "capabilities": ["burn-preview", "chart-preview"]})
             return self._send_text(payload, "application/json; charset=utf-8")
         if path == "/__project.json" and getattr(self.server, "project_json", None) is not None:
             return self._send_text(self.server.project_json, "application/json; charset=utf-8")
@@ -60,9 +61,11 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
             return self._handle_format()
         if split.path == "/api/export":
             return self._handle_export(parse_qs(split.query))
+        if split.path == "/api/preview":
+            return self._handle_export(parse_qs(split.query), preview=True)
         self.send_error(404, "Not Found")
 
-    def _handle_export(self, query) -> None:
+    def _handle_export(self, query, preview=False) -> None:
         """Render the request body (a chart JSON document) via the CLI's
         matplotlib-based renderer and return the resulting file bytes.
 
@@ -75,12 +78,14 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
 
         mode = (query.get("mode") or ["gantt"])[0]
         fmt = (query.get("format") or ["png"])[0].lower()
+        if preview:
+            fmt = 'svg'
         try:
             dpi = int((query.get("dpi") or ["150"])[0])
         except ValueError:
             dpi = 150
 
-        if mode not in {"gantt", "table", "burn", "burn-table"}:
+        if mode not in {"gantt", "table", "burn", "burndown", "burnup", "burn-table"}:
             return self._send_json_error(f"unknown export mode: {mode!r}", 400)
         if fmt not in _EXPORT_CONTENT_TYPES:
             return self._send_json_error(f"unknown export format: {fmt!r}", 400)
@@ -89,6 +94,21 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
                 ".csv export is only supported for table output", 400
             )
         filename = _EXPORT_FILENAMES[(mode, fmt)]
+        table_filter = (query.get("table_filter") or ["all"])[0]
+        if table_filter not in {"all", "milestones", "tasks"}:
+            return self._send_json_error("unknown table filter", 400)
+        try:
+            render_depth = int(query["render_depth"][0]) if query.get("render_depth") else None
+            if render_depth is not None and render_depth < 0:
+                raise ValueError
+        except ValueError:
+            return self._send_json_error("render depth must be a non-negative integer", 400)
+        burn_options = {
+            "field": (query.get("burn_field") or ["cost"])[0],
+            "period": (query.get("burn_period") or ["month"])[0],
+            "group_by": (query.get("burn_group") or ["0"])[0],
+            "display_factor": (query.get("burn_factor") or ["1"])[0],
+        }
 
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -101,17 +121,20 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError, KeyError) as exc:
             return self._send_json_error(f"invalid chart JSON: {exc}", 400)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with _RENDER_LOCK, tempfile.TemporaryDirectory() as tmp_dir:
             output_path = str(Path(tmp_dir) / filename)
             try:
                 if mode == "table":
-                    render_table(config, output_path, dpi=dpi)
-                elif mode == "burn":
-                    render_burn_chart(config, output_path, dpi=dpi)
+                    render_table(config, output_path, dpi=dpi, render_depth=render_depth,
+                                 milestones_only=table_filter == "milestones",
+                                 no_milestones=table_filter == "tasks", interactive=preview)
+                elif mode in {"burn", "burndown", "burnup"}:
+                    render_burn_chart(config, output_path, dpi=dpi, **burn_options, interactive=preview,
+                                      display={"burndown": "remaining", "burnup": "cumulative"}.get(mode, (query.get("burn_display") or ["spend"])[0]))
                 elif mode == "burn-table":
-                    render_burn_table(config, output_path, dpi=dpi)
+                    render_burn_table(config, output_path, dpi=dpi, **burn_options, interactive=preview)
                 else:
-                    render_chart(config, output_path, dpi=dpi)
+                    render_chart(config, output_path, dpi=dpi, render_depth=render_depth, interactive=preview)
             except Exception as exc:  # noqa: BLE001
                 return self._send_json_error(f"failed to render export: {exc}", 400)
 
@@ -121,6 +144,8 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", _EXPORT_CONTENT_TYPES[fmt])
         self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(payload)))
+        if mode == "table":
+            self.send_header("X-Jsonantt-Table-Filter", table_filter)
         self.end_headers()
         self.wfile.write(payload)
 

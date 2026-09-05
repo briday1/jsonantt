@@ -1,7 +1,7 @@
 /**
  * Minimal dependency-free calendar popup used by the inspector date fields.
  *
- * `attachDatePicker(input, { format, onPick })` adds a 📅 trigger button next
+ * `attachDatePicker(input, { format, onPick })` adds a subtle calendar trigger next
  * to *input*; picking a day writes it back in the chart's own date format via
  * the `onPick` callback (the input keeps manual typing untouched).
  */
@@ -147,7 +147,7 @@ function buildTrigger(wrapper, input, { format, onPick }) {
   trigger.className = 'date-trigger';
   trigger.setAttribute('aria-label', 'Pick a date');
   trigger.title = 'Pick a date';
-  trigger.textContent = '📅';
+  trigger.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2"></rect><path d="M8 3v5M16 3v5M3.5 10h17"></path></svg>';
   wrapper.append(trigger);
 
   trigger.addEventListener('click', (event) => {
@@ -165,7 +165,20 @@ function buildTrigger(wrapper, input, { format, onPick }) {
     const popup = buildCalendar({ format, initial, onPick });
     // Keep clicks inside the calendar from reaching the dismissal listener.
     popup.addEventListener('click', (clickEvent) => clickEvent.stopPropagation());
-    wrapper.append(popup);
+    document.body.append(popup);
+    const triggerBox = trigger.getBoundingClientRect();
+    const popupBox = popup.getBoundingClientRect();
+    const gap = 4;
+    const viewportPad = 8;
+    let left = triggerBox.right - popupBox.width;
+    left = Math.max(viewportPad, Math.min(left, window.innerWidth - popupBox.width - viewportPad));
+    let top = triggerBox.bottom + gap;
+    if (top + popupBox.height > window.innerHeight - viewportPad) {
+      top = triggerBox.top - popupBox.height - gap;
+    }
+    top = Math.max(viewportPad, Math.min(top, window.innerHeight - popupBox.height - viewportPad));
+    popup.style.left = `${left}px`;
+    popup.style.top = `${top}px`;
     openPopup = popup;
   });
 }

@@ -39,6 +39,7 @@ Thumbs.db
 !logo.svg
 !vscode-extension/images/icon.png
 docs/_build/
+_site/
 
 # VS Code extension build artifacts
 vscode-extension/out/

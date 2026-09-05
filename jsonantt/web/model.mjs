@@ -7,6 +7,8 @@
  * the source of truth for rendering images.
  */
 
+import { validateValueFormat } from './value-format.mjs';
+
 export const DEFAULT_PALETTE = [
   '#4472C4', '#ED7D31', '#70AD47', '#FF5757', '#9DC3E6',
   '#FFC000', '#7030A0', '#00B0F0', '#FF0066', '#00B050',
@@ -129,7 +131,12 @@ export function lighten(color, pct) {
   if (!hex) return color;
   const amount = Math.max(0, Math.min(100, pct)) / 100;
   const channels = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
-  const mixed = channels.map((channel) => Math.round(channel + (255 - channel) * amount));
+  // Python round() uses ties-to-even, including at 50% lightening.
+  const mixed = channels.map((channel) => {
+    const value = channel + (255 - channel) * amount;
+    const floor = Math.floor(value);
+    return value - floor === 0.5 ? floor + (floor % 2) : Math.round(value);
+  });
   return `#${mixed.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
 }
 
@@ -255,18 +262,19 @@ function resolveNotBefore(all, byId) {
 function assignColors(tasks, style) {
   const palette = Array.isArray(style.colors) && style.colors.length ? style.colors : DEFAULT_PALETTE;
   const lightenPct = Number(style.subtask_lightening_pct || 0);
-  tasks.forEach((task, index) => {
-    const base = task.color || palette[index % palette.length];
+  let index = 0;
+  tasks.forEach((task) => {
+    const base = task.color || palette[index++ % palette.length];
     task.resolvedColor = base;
-    inheritColor(task.children, base, lightenPct, 1);
+    inheritColor(task.children, base, lightenPct);
   });
 }
 
-function inheritColor(children, parentColor, lightenPct, level) {
+function inheritColor(children, parentColor, lightenPct) {
   children.forEach((child) => {
-    const base = child.color || (lightenPct ? lighten(parentColor, lightenPct * level) : parentColor);
+    const base = child.color || (lightenPct ? lighten(parentColor, lightenPct) : parentColor);
     child.resolvedColor = base;
-    inheritColor(child.children, child.color || parentColor, lightenPct, level + 1);
+    inheritColor(child.children, base, lightenPct);
   });
 }
 
@@ -281,6 +289,7 @@ export function parseChart(data) {
   }
   const dateFormat = data.dateformat || data.date_format || '%Y-%m-%d';
   const style = (data.style && typeof data.style === 'object') ? data.style : {};
+  validateValueFormat(style);
   const tasks = nestedItems(data).map(({ item, key, index }) => parseTask(item, dateFormat, 0, [key, index]));
 
   const flat = [];

@@ -139,6 +139,14 @@ class Style:
     table_show_markers: bool = True   # draw milestone diamonds in table output
     tick_position: str = "top"        # x-axis label position: "top", "bottom", or "both"
     table_columns: List[Any] = field(default_factory=list)  # ordered table columns; empty keeps default columns
+    render_depth: int = 0              # 0 = all levels; CLI --renderdepth overrides
+    show_arrows: bool = True           # show configured dependency arrows
+    today_marker: bool = False         # mark today on Gantt output
+    value_prefix: Optional[str] = None  # opt-in numeric display prefix, e.g. $
+    value_suffix: Optional[str] = None  # display annotation, e.g. USD or thousands
+    value_scale: str = 'units'          # units, thousands, millions, billions
+    value_decimals: Optional[int] = None  # None = up to two places when opted in
+    value_fields: List[str] = field(default_factory=lambda: ['cost'])  # [] applies to all amount fields
 
 
 @dataclass

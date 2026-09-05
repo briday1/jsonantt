@@ -50,6 +50,18 @@ All fields at a glance
      - Typography
      - ``12.0``
      - Base font size in points
+   * - ``render_depth``
+     - Layout
+     - ``0``
+     - Visible nesting depth for Gantt and Table; 0 shows all levels. CLI ``--renderdepth`` overrides this value
+   * - ``show_arrows``
+     - Display
+     - ``true``
+     - Show dependency arrows on the Gantt, without removing their source definitions
+   * - ``today_marker``
+     - Display
+     - ``false``
+     - Draw today's date on Gantt output; explicit CLI ``--date-line`` takes precedence
    * - ``bold_tasks``
      - Typography
      - ``true``
@@ -126,6 +138,64 @@ All fields at a glance
      - Table
      - ``[]``
      - Custom ordered column definitions
+
+Currency and value units (optional)
+-----------------------------------
+
+Use chart-wide value display settings to show costs as dollars, thousands,
+millions, or billions without changing source numbers or calculations:
+
+.. code-block:: json
+
+   {
+     "style": {
+       "value_prefix": "$",
+       "value_scale": "millions",
+       "value_decimals": 2,
+       "value_fields": ["cost"]
+     }
+   }
+
+A cost of ``1250000`` displays as **$1.25M**. The same formatting is used for
+Burn/Burndown/Burnup axis labels, interactive tooltips, budget-line tooltips,
+Table/Burn table cells and totals, and PNG/SVG/CSV exports. Graph axis/unit labels
+identify the currency and scale. Date labels, task numbers, and IDs are unaffected.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 20 55
+
+   * - Field
+     - Default
+     - Meaning
+   * - ``value_prefix``
+     - ``null``
+     - Prefix such as ``$``, ``€``, or a currency code followed by a space. Null preserves an existing source prefix.
+   * - ``value_scale``
+     - ``"units"``
+     - ``units``, ``thousands`` (K), ``millions`` (M), or ``billions`` (B). Divides displayed values by 1, 1,000, 1,000,000, or 1,000,000,000 respectively.
+   * - ``value_suffix``
+     - ``null``
+     - Optional unit annotation such as ``USD`` or ``thousand``; does not scale values. Null preserves an existing source suffix.
+   * - ``value_decimals``
+     - ``null``
+     - Fixed decimal places from 0 to 8. Null uses up to two places when this formatting is enabled.
+   * - ``value_fields``
+     - ``["cost"]``
+     - Fields receiving this formatting. For example, ``["cost", "budget"]`` leaves effort unchanged. ``[]`` applies to all numeric amount fields, excluding structural IDs/dates/durations.
+
+With all formatting options at their defaults, existing output is unchanged.
+Enabling a prefix, suffix, scale, or decimal override opts the selected fields in.
+Rounding is display-only, using ties-to-even; raw values, sums, and allocations
+are never rounded or rewritten by these settings.
+
+Existing ``display_factor`` / ``--burn-display-factor`` multipliers still apply
+first. Avoid scaling twice: if your source numbers already represent thousands
+(or an existing multiplier has converted them), leave ``value_scale`` as
+``"units"`` and set ``value_suffix`` to ``"thousand"``. For example, ``1250``
+then displays as ``$1,250 thousand`` without changing its magnitude.
+
+All five controls are available under **Chart settings → Value display**.
 
 Layout
 ------
@@ -233,10 +303,10 @@ jsonantt draws two levels of tick marks: a *major* level (prominent gridlines, b
      - Description
    * - ``major_tick``
      - ``null``
-     - Major tick interval. One of ``"year"``, ``"quarter"``, ``"month"``, ``"week"``, or ``"day"``. ``null`` disables major ticks.
+     - Major tick interval. One of ``"year"``, ``"quarter"``, ``"month"``, ``"week"``, or ``"day"``. ``null`` uses the default yearly ticks.
    * - ``minor_tick``
      - ``null``
-     - Minor tick interval. Same values as ``major_tick``. Typically set to a finer interval than ``major_tick``.
+     - Minor tick interval. Same values as ``major_tick``. ``null`` uses quarterly ticks. Typically set to a finer interval than ``major_tick``.
    * - ``major_grid_width``
      - ``2.0``
      - Linewidth of major gridlines.

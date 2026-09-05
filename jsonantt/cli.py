@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 from jsonantt.parser import load_chart
+from jsonantt.value_format import validate_value_format
 from jsonantt.renderer import render_burn_chart, render_burn_table, render_chart, render_compare_chart, render_compare_table, render_table
 
 
@@ -106,6 +107,8 @@ def main(argv=None) -> int:
             "  jsonantt -t project.json task-table.png\n"
             "  jsonantt --burn project.json burn.png --burn-field cost --burn-period month --burn-group 0\n"
             "  jsonantt --burn-table project.json burn-table.csv --burn-field cost --burn-period year --burn-group 0\n"
+            "  jsonantt --burnup project.json burnup.png --burn-period quarter --burn-group leaf\n"
+            "  jsonantt --burndown project.json burndown.png --burn-period quarter\n"
             "  jsonantt project-agreed.json compare.png --compare project-actual.json\n"
             "  jsonantt serve project.json"
         ),
@@ -127,10 +130,10 @@ def main(argv=None) -> int:
     parser.add_argument(
         "-r", "--renderdepth",
         type=int,
-        default=0,
+        default=None,
         help=(
             "Maximum nesting depth to render: 0 renders all levels, 1 renders only "
-            "top-level tasks, 2 includes one level of children, and so on"
+            "top-level tasks, 2 includes one level of children, and so on. Defaults to style.render_depth."
         ),
     )
     mode_group = parser.add_mutually_exclusive_group()
@@ -149,6 +152,8 @@ def main(argv=None) -> int:
         action="store_true",
         help="Render a funded burn matrix table with time buckets as columns",
     )
+    mode_group.add_argument('--burndown', action='store_true', help='Render planned remaining allocation over time')
+    mode_group.add_argument('--burnup', action='store_true', help='Render planned cumulative allocation over time')
     parser.add_argument(
         "--burn-field",
         default="cost",
@@ -169,6 +174,13 @@ def main(argv=None) -> int:
         default="1",
         help="Display-only numeric multiplier applied once to burn output values (default: 1)",
     )
+    parser.add_argument("--burn-display", choices=("spend", "remaining", "cumulative"), default="spend",
+                        help="Legacy --burn display: spend, remaining (burndown), or cumulative (burnup)")
+    parser.add_argument('--value-scale', choices=('units','thousands','millions','billions'), help='Display numeric amounts in these units (overrides style.value_scale)')
+    parser.add_argument('--value-prefix', help='Currency/value prefix, e.g. $ (overrides style.value_prefix)')
+    parser.add_argument('--value-suffix', help='Unit annotation without scaling, e.g. USD or thousand')
+    parser.add_argument('--value-decimals', type=int, help='Fixed decimal places, 0–8')
+    parser.add_argument('--value-fields', help='Comma-separated amount fields; an empty string means all amount fields')
     parser.add_argument(
         "--date-line",
         help="Optional single vertical line date for chart output, using the input dateformat or the special value 'today'",
@@ -212,6 +224,20 @@ def main(argv=None) -> int:
             print(f"error: failed to parse {args.compare}: {exc}", file=sys.stderr)
             return 1
 
+    try:
+        overrides = {key:getattr(args, key) for key in ('value_scale','value_prefix','value_suffix','value_decimals') if getattr(args, key) is not None}
+        if args.value_fields is not None:
+            overrides['value_fields'] = [field.strip() for field in args.value_fields.split(',') if field.strip()]
+        elif overrides and (args.burn or args.burndown or args.burnup or args.burn_table):
+            overrides['value_fields'] = [args.burn_field]
+        for chart in [config] + ([compare_config] if compare_config is not None else []):
+            for key, value in overrides.items():
+                setattr(chart.style, key, value)
+            validate_value_format(chart.style)
+    except ValueError as exc:
+        print(f'error: {exc}', file=sys.stderr)
+        return 1
+
     output_ext = Path(args.output).suffix.lower()
     is_table_like = args.table or args.burn_table
     if output_ext == ".csv" and not is_table_like:
@@ -234,7 +260,7 @@ def main(argv=None) -> int:
         if args.table:
             print("error: --date-line is only supported for chart output", file=sys.stderr)
             return 1
-        if args.burn or args.burn_table:
+        if args.burn or args.burndown or args.burnup or args.burn_table:
             print("error: --date-line is only supported for Gantt chart output", file=sys.stderr)
             return 1
         try:
@@ -248,7 +274,7 @@ def main(argv=None) -> int:
         if line_date is not None:
             render_kwargs["date_line"] = line_date
             render_kwargs["date_line_color"] = args.date_line_color
-        if args.burn or args.burn_table:
+        if args.burn or args.burndown or args.burnup or args.burn_table:
             if compare_config is not None:
                 raise ValueError("compare mode is not supported for burn output")
             if args.milestones_only or args.no_milestones:
@@ -261,7 +287,7 @@ def main(argv=None) -> int:
         elif args.no_milestones:
             raise ValueError("--no-milestones requires --table")
 
-        if args.burn:
+        if args.burn or args.burndown or args.burnup:
             render_burn_chart(
                 config,
                 args.output,
@@ -270,6 +296,7 @@ def main(argv=None) -> int:
                 period=args.burn_period,
                 group_by=args.burn_group,
                 display_factor=args.burn_display_factor,
+                display='remaining' if args.burndown else 'cumulative' if args.burnup else args.burn_display,
             )
         elif args.burn_table:
             render_burn_table(

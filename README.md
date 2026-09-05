@@ -7,6 +7,8 @@ Charts are rendered with [matplotlib](https://matplotlib.org/) so they can be sa
 
 📖 **Full documentation:** https://jsonantt.readthedocs.io
 
+[Open the web GUI](https://briday1.github.io/jsonantt/) · [Run the GUI locally](#run-your-own-local-instance)
+
 ---
 
 ## Features
@@ -23,7 +25,7 @@ Charts are rendered with [matplotlib](https://matplotlib.org/) so they can be sa
 - **Table output mode** — render a task summary table with the same hierarchy and colour cues.
 - **Funded burn output** — render cost-over-time charts and period matrix tables from numeric task fields.
 - **PNG / PDF / SVG output** — whatever matplotlib supports.
-- **Interactive studio** — `jsonantt serve` opens a browser workspace with a JSON sidebar and live Gantt/Graph canvas.
+- **Interactive studio** — [open the GUI](https://briday1.github.io/jsonantt/) or run `jsonantt serve` for a JSON editor with interactive Gantt, Table, Burn, Burndown, Burnup, and Burn table views.
 
 ---
 
@@ -161,7 +163,9 @@ Description and Name cells wrap to the measured rendered width of the column, an
 
 If the table output path ends in `.csv`, `jsonantt` writes CSV instead of an image. `.csv` output is only accepted for `--table`/`--burn-table` modes; Gantt and burn charts must be exported as `.png` (with `--dpi`) or `.svg`, and the CLI reports a clear error for any other extension or combination.
 
-The [studio](docs/studio.rst) (`jsonantt serve`) exports PNG/SVG/CSV files through this exact same `jsonantt.renderer` (matplotlib) code path over its local `/api/export` endpoint — there is no separate browser-side rendering used for exported files, so studio exports are produced identically to `jsonantt` CLI output.
+The [studio](docs/studio.rst) uses this same `jsonantt.renderer` (matplotlib) code
+for interactive SVG previews and PNG/SVG/CSV exports. `jsonantt serve` runs it
+locally; static hosting runs the bundled Python source in a Pyodide worker.
 
 `--compare` turns the first JSON input into the planned/agreed baseline and overlays the second JSON as the updated/actual state. In compare charts, planned bars are drawn as slightly larger unfilled outlines, actual bars are drawn normally, removed planned tasks are struck through with no actual bar, and actual-only tasks render as normal filled bars. In compare tables and CSV output, the `Offset` column shows signed duration changes like `+2d`, `-1w`, `+3mo`, or `+1y`; milestones use the signed date shift instead.
 
@@ -169,13 +173,56 @@ The [studio](docs/studio.rst) (`jsonantt serve`) exports PNG/SVG/CSV files throu
 
 Use `--burn-period` to choose `day`, `week`, `month`, `quarter`, or `year`. Use `--burn-group total` for one overall series, `--burn-group leaf` for the lowest direct-cost tasks, or a depth integer where `0` is top-level, `1` is subtasks, `2` is sub-subtasks, and so on. `--burn-table` renders the same burn data as a matrix with one row per grouped task and one column per time bucket. `--burn-display-factor` applies a display-only multiplier once, after burn allocation, so the same scaling rules used for cost tables also work here.
 
+`--burndown` renders remaining planned allocation; `--burnup` renders cumulative
+planned allocation with dotted, colour-matched budget lines per task/group:
+
+```bash
+jsonantt --burndown project.json burndown.png --burn-period quarter
+jsonantt --burnup project.json burnup.png --burn-period quarter --burn-group leaf --dpi 300
+```
+
 Use `--date-line` to draw a single vertical reference line on chart outputs. It accepts either a date in the input file's `dateformat` or the special value `today`. Use `--date-line-color` to control its color.
 
 ---
 
 ## Interactive studio
 
-Prefer working visually? `jsonantt serve` opens the **jsonantt studio** in your browser — a
+To display cost values as currency in thousands or millions, set optional style
+fields such as `"value_prefix": "$"`, `"value_scale": "millions"`, and
+`"value_decimals": 2`. A raw cost of `1250000` then displays as **$1.25M** in
+graphs and tables, including exports. Defaults preserve existing output; raw
+numbers never change. Configure this in **Chart settings → Value display**, or
+see the [value-formatting reference](docs/style-guide.rst#currency-and-value-units-optional).
+
+The CLI also accepts display overrides (without editing your JSON):
+
+```bash
+jsonantt --burnup project.json burnup.png --value-scale millions --value-prefix '$' --value-decimals 2
+jsonantt --burn-table project.json burn.csv --value-scale thousands --value-prefix '$'
+```
+
+Scales are `units`, `thousands`, `millions`, and `billions`. `--value-suffix` adds
+an annotation without scaling; `--value-fields cost,budget` selects amount fields.
+For burn views, CLI overrides apply to the selected `--burn-field` by default.
+All options are optional; existing output and source values are unchanged.
+
+All six previews use the CLI renderer's SVG directly: Gantt, Table, Burn,
+Burndown, Burnup, and Burn table. These are interactive SVG elements—not
+pictures—with task/arrow selection and tooltips. Local instances use Python on
+the server; static hosting runs the same Python sources in a Pyodide worker.
+There is no approximate browser drawing fallback. The first hosted render
+downloads Python, matplotlib, and fonts; later renders reuse the loaded worker.
+
+Gantt has view controls for **Rollup depth** and **Roll up milestones**, saved in
+the source and shared with exports. Task Properties includes editable **Cost**
+in its original units, before any display scaling.
+
+**[Launch the jsonantt GUI](https://briday1.github.io/jsonantt/)** — no installation needed.
+Try the [delivery demo](https://briday1.github.io/jsonantt/?demo=1),
+[milestones demo](https://briday1.github.io/jsonantt/?demo=2), or
+[cost/burn demo](https://briday1.github.io/jsonantt/?demo=3).
+
+For a local instance with PNG/SVG/CSV exports, `jsonantt serve` opens the same studio — a
 source sidebar, a live canvas, and a properties/objects side panel, styled after
 [pugflow](https://github.com/briday1/pugflow):
 
@@ -189,6 +236,11 @@ jsonantt serve --port 8080 --no-browser
   the canvas instantly; parse errors are shown inline without discarding the last good render.
 - **Canvas tabs** — **Gantt** (default, live-updating) and **Table** (the same task table the
   CLI renders, honouring `style.table_columns`, `table_colorize`, and `table_show_markers`).
+  Table filters show all rows, milestones only, or tasks without milestones.
+  **Burn** shows period-spend bars; separate **Burndown** and **Burnup** tabs show
+  remaining and cumulative planned allocation. Burnup includes dotted task/group
+  budget lines. **Burn table** shows period totals. All share field, period, grouping,
+  and scaling controls.
   Clicking a bar, milestone, or table row keeps the objects panel and properties box in sync.
 - **Chart settings** — the **Settings → Chart settings…** dialog exposes the overall chart
   configuration: `title`, `dateformat`, chart `start`/`end` (with a calendar date picker), the
@@ -201,15 +253,75 @@ jsonantt serve --port 8080 --no-browser
   chart's own `dateformat`. A **Relationships** section lists what the entry *depends on*
   (upstream: `not_before`, parent, incoming arrows) and what *depends on it* (downstream:
   subtasks, chained tasks, outgoing arrows). Every related entry is clickable.
-- Add tasks/subtasks/milestones/arrows, undo/redo, zoom, dark mode, and SVG copy/save.
+- Add tasks/subtasks/milestones/arrows, undo/redo, zoom, dark mode, and local PNG/SVG/CSV exports.
 
 **Formatting parity:** the studio's *Format JSON* button uses the exact same formatter as the
 CLI (`jsonantt fmt`), served over the local `/api/format` endpoint, so saved output is
 byte-for-byte identical either way. When the studio is hosted statically (no local server), a
 matching in-browser implementation (2-space indent, trailing newline) is used instead.
 
-Chart images, burn and compare output stay on the command line — the studio is a
-JSON authoring and preview layer, and never changes the JSON format.
+The hosted GUI supports editing, interactive previews, and PNG/SVG/CSV export
+through Pyodide. Choose **File → Export…** for PNG/SVG and PNG resolution, or
+**File → Save CSV…** in a table view. Compare output remains a CLI feature.
+
+### Run your own local instance
+
+Install Python 3.8 or newer, then create an environment and install jsonantt.
+On macOS/Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade jsonantt
+jsonantt serve
+```
+
+On Windows (PowerShell):
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade jsonantt
+.\.venv\Scripts\jsonantt.exe serve
+```
+
+The server opens **http://127.0.0.1:4174/** in your browser. Keep the terminal running;
+press **Ctrl+C** there to stop the server. You can also open
+**http://127.0.0.1:4174/?demo=3** to try the cost demo locally.
+
+```bash
+jsonantt serve project.json                  # load a chart from disk
+jsonantt serve --port 8080 --no-browser       # open http://127.0.0.1:8080/ yourself
+```
+
+For the latest development version, clone this repository, create/activate an environment
+as above, then install the checkout:
+
+```bash
+git clone https://github.com/briday1/jsonantt.git
+cd jsonantt
+python -m pip install -e .
+jsonantt serve examples/simple.json
+```
+
+Use **File → Save JSON…** to download your edits; opening a local chart does not overwrite
+its file automatically. After updating Python code or upgrading the package, restart the
+server so exports use the new renderer, then refresh the browser.
+
+To build and serve a static instance (no Python rendering server at runtime):
+
+```bash
+python -m jsonantt.static_site --output _site
+python -m http.server 8080 --directory _site
+```
+
+The build bundles the current Python source automatically; do not deploy only
+`jsonantt/web`. The Pages workflow performs this build for every Python or GUI
+change. The browser needs WebAssembly, module workers, and CDN access on first
+load. If those are unavailable, use `jsonantt serve`; no alternate chart style
+is substituted. Rendering data stays in the browser on static hosts.
+
+See the [local-server documentation](docs/studio.rst#running-your-own-local-server) for
+more options, including access from another device on your network.
 
 ### `jsonantt fmt`
 
@@ -548,4 +660,3 @@ jsonantt -t examples/complex.json examples/complex-table.png         # full comp
 jsonantt -t --milestones-only examples/complex.json examples/complex-milestones.png # complex milestones only
 jsonantt -t --no-milestones examples/complex.json examples/complex-no-milestones.png # complex without milestones
 ```
-
