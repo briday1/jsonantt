@@ -57,5 +57,5 @@ export function wireInspectorDrag(panel, shell, handle) {
     observer.observe(panel);
   }
   view.addEventListener('resize', reclamp);
-  return {reclamp};
+  return {reclamp, restore: next => { if (Number.isFinite(next.x) && Number.isFinite(next.y)) move(next); }};
 }

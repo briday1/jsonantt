@@ -10,7 +10,7 @@ function element(tag, className, text) {
   return node;
 }
 function field(label, input, help) {
-  const wrap = element('label', 'settings-field');
+  const wrap = element('div', 'settings-field');
   wrap.append(element('span', '', label), input);
   if (help) wrap.append(element('small', 'settings-help', help));
   return wrap;
@@ -64,6 +64,9 @@ function settingInput(option, value, save) {
   });
   const wrap = element('span', 'setting-control');
   wrap.append(input);
+  if (option.key === 'fiscal_year_start') {
+    attachDatePicker(input, {format: '%m-%d', onPick: text => save(text)});
+  }
   if (option.type === 'color') {
     const picker = element('input');
     picker.type = 'color';

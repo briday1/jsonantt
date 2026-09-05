@@ -2,10 +2,10 @@
    jsonantt studio matches its sidebar/canvas look and feel. */
 :root {
   color-scheme: light;
-  --page: #eef0f3;
-  --panel: #f8f9fa;
-  --surface: #ffffff;
-  --surface-soft: #f1f3f5;
+  --page: #e8ecf0;
+  --panel: #f1f3f5;
+  --surface: #f8f9fa;
+  --surface-soft: #e9edf1;
   --canvas: #c7cdd4;
   --canvas-dot: #aab4bf;
   --border: #d5dbe2;
@@ -19,7 +19,7 @@
   --danger: #c2413d;
   --danger-soft: #fff1f0;
   --code-bg: #edf1f5;
-  --source-bg: #fafbfc;
+  --source-bg: #ffffff;
   --selection: rgba(46, 107, 167, .22);
   --shadow: rgba(16, 42, 67, .12);
   color: var(--text);
@@ -93,6 +93,7 @@ nav { display: flex; align-items: center; gap: 8px; }
 .toolbar-popover > strong { display: block; padding: 7px 8px 4px; color: var(--faint); font-size: 8px; letter-spacing: .12em; }
 .toolbar-popover > button, .toolbar-popover > label, .toolbar-popover > a { display: flex; width: 100%; min-height: 30px; align-items: center; gap: 8px; padding: 7px 8px; border: 0; border-radius: 5px; color: var(--text); background: transparent; font-size: 11px; text-align: left; text-decoration: none; }
 .toolbar-popover > button:hover, .toolbar-popover > label:hover, .toolbar-popover > a:hover { color: var(--heading); background: var(--code-bg); }
+.toolbar-popover select { margin-left: auto; padding: 3px 5px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 11px; }
 .about-menu { margin-right: 2px; padding-right: 10px; border-right: 1px solid var(--border); }
 .about-menu > summary { padding-left: 2px; font-size: 13px; letter-spacing: -.01em; }
 .about-version { margin: 0; padding: 5px 8px 8px; color: var(--muted); font-size: 10px; }
@@ -555,6 +556,35 @@ code { padding: 2px 4px; border-radius: 3px; color: var(--accent); background: v
 .color-clear:hover { border-color: var(--accent); color: var(--heading); background: var(--code-bg); }
 
 /* ------------------------------------------------------------- date picker */
+#compare-controls { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel); }
+#compare-dialog { width: min(820px, calc(100vw - 40px)); max-height: calc(100vh - 40px); padding: 0; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
+#append-dialog { width: min(700px, calc(100vw - 40px)); max-height: calc(100vh - 40px); padding: 0; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
+#append-dialog::backdrop { background: rgba(15, 23, 32, .45); }
+.append-content { display: grid; gap: 12px; padding: 14px; font-size: 12px; }
+#append-list { display: grid; max-height: 40vh; overflow: auto; }
+.append-file { display: flex; align-items: center; gap: 6px; padding: 5px; border-bottom: 1px solid var(--border); }
+.append-file label { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.append-file button, #append-placement { padding: 4px 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+#append-status { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+#compare-dialog::backdrop { background: rgba(15, 23, 32, .45); }
+#compare-controls > label { display: flex; align-items: center; gap: 6px; margin: 8px 0 14px; font-size: 12px; }
+#compare-indicator { padding: 6px 12px; text-align: left; border: 0; border-bottom: 1px solid var(--border); background: var(--surface-soft); color: var(--accent); font-size: 11px; }
+#local-file-dialog { width: min(640px, calc(100vw - 40px)); max-height: calc(100vh - 40px); padding: 0; border: 1px solid var(--border); color: var(--text); background: var(--panel); }
+#local-file-dialog::backdrop { background: rgba(15, 23, 32, .45); }
+.local-file-content { display: grid; gap: 10px; padding: 14px; font-size: 12px; }
+#local-file-path { width: 100%; padding: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+#local-file-list { display: grid; max-height: 45vh; overflow: auto; }
+#local-file-list button { padding: 7px; text-align: left; border: 0; background: var(--surface); color: var(--text); overflow-wrap: anywhere; }
+#local-file-list button:hover { background: var(--code-bg); }
+#local-file-list button[aria-pressed="true"] { background: var(--selection); box-shadow: inset 3px 0 var(--accent); font-weight: 650; }
+#compare-current-file, #compare-baseline-file { margin: 5px 0; font-size: 11px; overflow-wrap: anywhere; color: var(--text); }
+.compare-dialog-actions { position: sticky; bottom: 0; margin-top: 14px; padding: 10px 0 4px; background: var(--panel); border-top: 1px solid var(--border); }
+.compare-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.compare-actions button, .compare-actions select { padding: 5px 8px; border: 1px solid var(--border); color: var(--text); background: var(--surface); font-size: 11px; }
+.compare-actions label { color: var(--muted); font-size: 11px; }
+.compare-actions button:disabled { opacity: .55; cursor: not-allowed; }
+#compare-status { margin: 6px 0 0; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+#compare-revisions { width: 100%; margin-top: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: 11px/1.5 monospace; }
 .date-field { position: relative; display: block; width: 100%; min-width: 0; }
 .date-field input { width: 100%; min-width: 0; padding-right: 30px; }
 .date-trigger { position: absolute; top: 1px; right: 1px; width: 27px; height: 27px; min-height: 0; padding: 5px; border: 0; border-left: 1px solid var(--border); border-radius: 0 4px 4px 0; color: var(--muted); background: transparent; line-height: 1; }
@@ -562,6 +592,8 @@ code { padding: 2px 4px; border-radius: 3px; color: var(--accent); background: v
 .date-trigger:hover { border-color: var(--accent); background: var(--code-bg); }
 .date-picker {
   position: fixed;
+  margin: 0;
+  inset: auto;
   z-index: 100;
   width: 216px;
   max-width: calc(100vw - 16px);

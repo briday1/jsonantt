@@ -1,7 +1,7 @@
 /** Lazy singleton worker; source data stays inside the browser on static hosts. */
 let worker, sequence = 0;
 const pending = new Map();
-const MIME = {svg:'image/svg+xml',png:'image/png',csv:'text/csv'};
+const MIME = {svg:'image/svg+xml',png:'image/png',csv:'text/csv',json:'application/json'};
 let warming;
 export function warmBrowserRenderer() {
   warming ||= renderInBrowser('',{warmup:true}).catch(()=>{warming=null;});

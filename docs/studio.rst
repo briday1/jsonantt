@@ -241,6 +241,54 @@ Use **Add subtask** below the task name to create a child of that task and open
 the child's properties. This works from both Gantt and table selections.
 Scheduling dependencies are edited with **Not before**; existing arrows remain
 selectable and editable in their own properties.
+Start/end, chart start/end, milestone dates, and fiscal-year start all offer
+calendar popups. Modal settings calendars open above the dialog's scrolling
+content; milestone-chain picking replaces only the last date. Manual typing
+remains available, with dates stored in the source's format (fiscal start uses MM-DD).
+
+Comparing files and Git revisions
+--------------------------------------------------
+
+Open **File → Compare…**. In that popup use either **Choose baseline JSON…** to
+upload any chart, or **Git history…** to browse the
+selected local file's commits by date, SHA, and message. Clicking a revision
+loads it as the baseline; it never replaces or saves the current editor.
+Use **Apply comparison** at the bottom to confirm the selection and close the popup.
+The current editor, including unsaved edits, is the actual/updated side.
+Enable/disable **Compare mode** in the popup or File menu; the existing six output
+tabs all use that mode. Gantt/task tables use the CLI comparison renderers;
+burn, burndown, burnup, and burn tables show baseline/current native drawings
+side by side. Comparison previews support zoom/fit and PNG/SVG export (CSV for tables).
+Task editing remains in the ordinary Gantt/table views; comparison drawings are read-only.
+
+To choose a local file, use **File → Open local file…**. Browse directories or
+enter its full path. This works even if the server was started without a filename.
+Click a file to highlight it and fill its full path, then confirm with **Open file**
+(or **Use this file** when locating history). Double-clicking a file confirms directly.
+If the current file's path is not yet known, clicking **Git history…** offers that
+picker automatically to locate the file, without replacing unsaved editor content.
+Git history follows that selected path, including renames, up to the latest 200
+commits in the current branch. No Git checkout or disk writes are performed.
+The ordinary **Open JSON…** upload works on static hosts too, but browser uploads
+do not expose a trustworthy full path; use the local picker for Git integration.
+The server account must be able to read the file and run Git.
+Older running servers must be restarted to provide the new local-file/history endpoints.
+
+Workspace recovery
+------------------
+
+Refreshing or revisiting restores unsaved source, selected file path, comparison
+baseline/revision, canvas view, filters, zoom, selection, panel layout, scroll
+positions, and the most recent 20 undo/redo entries. Even incomplete JSON is
+kept. A recovered draft takes precedence over the startup file's disk snapshot.
+An explicit different demo or startup file still opens the requested document.
+
+Recovery is local to the browser and origin, not a save to disk or Git. Clearing
+site data, private browsing, switching ports/origins, or storage limits can lose
+recovery data. A warning appears if workspace storage fails. Save JSON for a
+durable copy; optional undo history is dropped first if storage runs out.
+
+See :doc:`api` for complete HTTP/Python functionality and local-file/history endpoints.
 
 The **Relationships** section explains how the entry is wired into the plan:
 
@@ -264,7 +312,8 @@ Editing and shortcuts
 * Undo/redo (also ``Ctrl``/``Cmd`` + ``Z``), ``Escape`` clears the selection, and
   ``Delete`` removes the selected task or arrow.
 * Zoom controls, ``Ctrl``/``Cmd`` + mouse wheel zoom, and a **Fit** button for all views.
-* Light/dark theme toggle in **Settings**; the source is kept in ``localStorage``.
+* **Settings → Theme** toggles between light and dark. Your OS chooses the initial
+  theme unless you have a saved override; clicking the toggle remembers your choice.
 
 Limitations
 -----------
@@ -276,7 +325,36 @@ Static hosting needs WebAssembly, module workers, and access to the Pyodide CDN
 on first use. The initial runtime/package download can take time and uses more
 memory than the local-server option. If browser support, network policy, or memory
 prevents rendering, the GUI reports the error; use ``jsonantt serve`` instead.
-Compare rendering and ``filename`` includes remain command-line features.
+Use self-contained JSON in the GUI. **File → Append JSON…** can resolve filename
+includes from selected files/folders into editable snapshots. Live filesystem
+links remain a CLI/Python feature (``load_chart`` resolves them relative to the source file).
+
+Appending / composing task files
+------------------------------------------
+
+**File → Append JSON…** accepts multiple JSON files. Use **Load folder…** when
+includes live in nested directories, so their relative paths are retained.
+Check the files to append and use the up/down buttons to choose their order.
+Unchecked files remain available to resolve ``filename`` references; dependency
+files are initially unchecked so they are not appended twice.
+
+Choose **Append tasks inline** to append each selected file's task tree directly,
+or **One parent task per file** to place it under a task named after that file.
+Click **Append selected files** to confirm and close the popup. Importing is one
+undoable operation and is included in workspace recovery.
+
+This follows CLI inclusion semantics: only task trees are imported, not the
+included chart's style, title, range, or arrows. Nested includes, task costs,
+metadata, milestone chains, and cross-file scheduling references are retained.
+Dates are converted from each source file's format to the current chart's format.
+The destination's settings and existing arrows remain unchanged.
+
+Imports are editable snapshots, not live links, so Save JSON produces one portable
+file and property edits never write back to imported files. Missing/circular
+includes and duplicate task IDs are reported before any source change. Load all
+referenced JSON files, including unchecked dependencies, before confirming.
+Static hosting uses the same Python composer inside Pyodide; the local server
+provides ``POST /api/compose``. Neither composer reads arbitrary filesystem paths.
 
 Static hosting
 --------------

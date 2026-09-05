@@ -15,9 +15,13 @@ import { wireInspectorDrag } from './inspector-drag.mjs';
 import { createPreviewLoader } from './preview.mjs';
 import { createPreviewStore } from './preview-store.mjs';
 import { warmBrowserRenderer } from './python-client.mjs';
+import { wireComparison } from './compare.mjs';
+import { wireLocalFiles } from './local-files.mjs';
+import { readWorkspace, saveWorkspace } from './workspace.mjs';
+import { wireThemeControl } from './theme.mjs';
+import { wireAppend } from './append.mjs';
 
 const STORAGE_SOURCE = 'jsonantt.source';
-const STORAGE_THEME = 'jsonantt.theme';
 const HISTORY_LIMIT = 100;
 
 const $ = (selector) => document.querySelector(selector);
@@ -35,6 +39,9 @@ const state = {
   showArrows: true,
   todayMarker: false,
   serverPreview: false,
+  projectAttached: false,
+  projectPath: null,
+  launchPath: null,
   serverBurnPreview: false, // Older local servers may support burn views only.
   settingsFocus: 'general',
   undoStack: [],
@@ -58,6 +65,40 @@ const elements = {
   settingsContent: $('#settings-content'),
   main: document.querySelector('main'),
 };
+
+let localFiles;
+const comparison = wireComparison({isAttached: () => state.projectAttached && Boolean(state.projectPath),
+  getPath: () => state.projectPath, hasLocalServer: () => state.serverPreview,
+  chooseCurrentFile: callback => localFiles.open(file => {
+    state.projectPath=file.path; state.projectAttached=true;
+    comparison.sync(); persistWorkspace(); callback();
+  }),
+  onChange: () => {renderCanvas(); renderInspector();}});
+let workspaceReady = false, restoredWorkspace = null, storageWarned = false, inspectorDrag;
+function persistWorkspace() {
+  if (!workspaceReady) return;
+  const shell = $('.canvas-shell');
+  const saved = saveWorkspace({source:state.source, projectPath:state.projectPath,
+    projectAttached:state.projectAttached, launchPath:state.launchPath,
+    entry:new URLSearchParams(window.location.search).get('demo'),
+    canvasTab:state.canvasTab, tableFilter:state.tableFilter, burn:state.burn,
+    zoom:state.zoom, selection:state.selection, comparison:comparison.snapshot(),
+    undoStack:state.undoStack.slice(-20), redoStack:state.redoStack.slice(-20),
+    sourceCollapsed:elements.main.classList.contains('source-collapsed'),
+    layersCollapsed:elements.main.classList.contains('layers-collapsed'),
+    panelWidth:elements.main.style.getPropertyValue('--panel-width'),
+    layersWidth:elements.main.style.getPropertyValue('--layers-open-width'),
+    inspectorPosition:{left:elements.inspector.style.left,top:elements.inspector.style.top},
+    sourceScroll:[elements.source.scrollLeft,elements.source.scrollTop],
+    canvasScroll:[shell.scrollLeft,shell.scrollTop],
+  });
+  if (!saved && !storageWarned) { storageWarned=true; toast('Browser recovery storage is unavailable. Save JSON to keep your changes.'); }
+}
+function canvasSource() {
+  if (!comparison.enabled) return state.source;
+  return comparison.baseline ? JSON.stringify({planned:comparison.baseline, actual:state.doc}) : null;
+}
+function canvasMode() { return comparison.enabled ? `compare-${state.canvasTab}` : state.canvasTab; }
 
 const chartPreview = createPreviewLoader({
   store: createPreviewStore(document.querySelector('meta[name="jsonantt-static-build"]')?.content),
@@ -85,6 +126,11 @@ const chartPreview = createPreviewLoader({
     elements.canvas.classList.remove('preview-invalid');
     delete elements.canvas.dataset.error;
     applyCanvasZoom();
+    if (restoredWorkspace?.canvasScroll) {
+      const shell = $('.canvas-shell');
+      [shell.scrollLeft,shell.scrollTop] = restoredWorkspace.canvasScroll;
+      delete restoredWorkspace.canvasScroll;
+    }
     if (!state.serverPreview && !state.serverBurnPreview) {
       // Paint the cached/bundled SVG first; prepare Python without blocking it.
       setTimeout(()=>{void warmBrowserRenderer();},500);
@@ -120,6 +166,7 @@ function setSource(text, { pushHistory = true, refreshEditor = true, preserveIns
   renderLineNumbers();
   renderHighlight();
   compile({ preserveInspector });
+  persistWorkspace();
 }
 
 function compile({ preserveInspector = false } = {}) {
@@ -183,9 +230,11 @@ function commitDoc({ preserveInspector = false } = {}) {
 // ----------------------------------------------------------------- rendering
 
 function renderCanvas() {
+  persistWorkspace();
   chartPreview.cancel();
   elements.canvas.setAttribute('aria-busy', 'false');
-  const fields = availableBurnFields(state.chart);
+  const fields = [...new Set([...availableBurnFields(state.chart),
+    ...(comparison.enabled && comparison.baseline ? availableBurnFields(parseChart(comparison.baseline)) : [])])];
   if (!fields.length && state.canvasTab.startsWith('burn')) state.canvasTab = 'gantt';
   document.querySelectorAll('[data-canvas-tab]').forEach((button) => {
     button.hidden = button.dataset.canvasTab.startsWith('burn') && !fields.length;
@@ -196,6 +245,8 @@ function renderCanvas() {
   const saveCsvButton = document.getElementById('save-csv');
   if (saveCsvButton) saveCsvButton.hidden = !['table', 'burn-table'].includes(state.canvasTab);
   $('#table-filter-control').hidden = state.canvasTab !== 'table';
+  comparison.sync();
+  if (comparison.enabled) elements.inspector.hidden = true;
   $('#burn-controls').hidden = !state.canvasTab.startsWith('burn');
   $('#gantt-controls').hidden = state.canvasTab !== 'gantt';
   if (!state.chart) {
@@ -232,9 +283,16 @@ function renderCanvas() {
   }
   if (!state.error) {
     const previewOptions = state.canvasTab.startsWith('burn')
-      ? {mode:state.canvasTab, ...state.burn}
-      : {mode:state.canvasTab, tableFilter:state.tableFilter, renderDepth:state.chart.style.render_depth};
-    chartPreview.schedule(state.source, state.chart, previewOptions, options.selectedKey);
+      ? {mode:canvasMode(), ...state.burn}
+      : {mode:canvasMode(), tableFilter:state.tableFilter, renderDepth:state.chart.style.render_depth};
+    const source = canvasSource();
+    if (source) chartPreview.schedule(source, state.chart, previewOptions, options.selectedKey);
+    else {
+      const note = document.createElement('p');
+      note.className = 'burn-empty';
+      note.textContent = 'Use File → Compare… to choose a baseline. It will be compared against the current editor without changing either file.';
+      elements.canvas.replaceChildren(note);
+    }
   }
   elements.canvas.classList.toggle('preview-invalid', Boolean(state.error));
   if (state.error) elements.canvas.dataset.error = state.error;
@@ -396,9 +454,9 @@ function textInput(value, onChange, { type = 'text', placeholder = '' } = {}) {
   return input;
 }
 
-function dateInput(value, onChange, dateFormat, { placeholder = '' } = {}) {
+function dateInput(value, onChange, dateFormat, { placeholder = '', multiple = false } = {}) {
   const input = textInput(value, onChange, { placeholder });
-  const wrapper = attachDatePicker(input, { format: dateFormat, onPick: (text) => { input.value = text; onChange(text, input); } });
+  const wrapper = attachDatePicker(input, { format: dateFormat, multiple, onPick: (text) => { input.value = text; onChange(text, input); } });
   return wrapper || input;
 }
 
@@ -410,7 +468,7 @@ function updateRaw(raw, key, value) {
 
 function renderInspector() {
   const container = elements.inspectorContent;
-  if (!state.selection || !state.chart) {
+  if (comparison.enabled || !state.selection || !state.chart) {
     elements.inspector.hidden = true;
     container.replaceChildren();
     return;
@@ -604,6 +662,7 @@ function renderInspector() {
       Array.isArray(raw.date) ? raw.date.join(', ') : raw.date,
       commitDates,
       dateFormat,
+      { multiple: true },
     ), 'Comma separated for milestone chains; the calendar edits the last date'));
   }
 
@@ -728,7 +787,8 @@ function download(filename, content, type) {
  */
 async function exportCanvas(format, { dpi } = {}) {
   if (!state.source) return false;
-  const source = state.source;
+  const source = canvasSource();
+  if (!source) { setStatus('Choose a comparison baseline before exporting.', 'error'); return false; }
   const options = canvasExportOptions();
   const { mode } = options;
   try {
@@ -744,7 +804,7 @@ async function exportCanvas(format, { dpi } = {}) {
 
 function canvasExportOptions() {
   return {
-    mode: state.canvasTab,
+    mode: canvasMode(),
     tableFilter: state.tableFilter,
     renderDepth: Number(state.chart?.style.render_depth || 0),
     burn: { ...state.burn },
@@ -753,7 +813,8 @@ function canvasExportOptions() {
 
 async function copyExportedSvg() {
   if (!state.source) return;
-  const source = state.source;
+  const source = canvasSource();
+  if (!source) { setStatus('Choose a comparison baseline before copying.', 'error'); return; }
   const options = canvasExportOptions();
   const { mode } = options;
   try {
@@ -900,7 +961,7 @@ function wireZoom() {
 }
 
 function wirePanels() {
-  wireInspectorDrag(elements.inspector, $('.canvas-shell'), $('.inspector-drag-handle'));
+  inspectorDrag = wireInspectorDrag(elements.inspector, $('.canvas-shell'), $('.inspector-drag-handle'));
   const main = elements.main;
   const toggleSource = $('#toggle-source');
   toggleSource.addEventListener('click', () => {
@@ -912,6 +973,8 @@ function wirePanels() {
   toggleLayers.addEventListener('click', () => {
     const collapsed = main.classList.toggle('layers-collapsed');
     toggleLayers.setAttribute('aria-expanded', String(!collapsed));
+    toggleLayers.setAttribute('aria-label', collapsed ? 'Show objects panel' : 'Hide objects panel');
+    toggleLayers.title = collapsed ? 'Show objects panel' : 'Hide objects panel';
     toggleLayers.querySelector('.toggle-arrow').textContent = collapsed ? '‹' : '›';
   });
 
@@ -937,7 +1000,21 @@ function wirePanels() {
 }
 
 function wireToolbar() {
+  wireAppend({getSource:()=>state.source,useServer:()=>state.serverPreview,
+    sourceName:()=>state.projectPath ? state.projectPath.split('/').at(-1) : null,
+    onAppend:source=>{setSource(source);selectKey(null);toast('Task files appended — undo to remove the import');}});
+  localFiles = wireLocalFiles({onOpen: ({path, source}) => {
+    state.projectAttached = true;
+    state.projectPath = path;
+    comparison.reset();
+    setSource(source);
+    selectKey(null);
+  }});
+  $('#compare-indicator').addEventListener('click', () => $('#compare-dialog').showModal());
   $('#new-chart').addEventListener('click', () => {
+    state.projectAttached = false;
+    state.projectPath = null;
+    comparison.reset();
     setSource(JSON.stringify({ title: 'New chart', dateformat: '%Y-%m-%d', tasks: [] }, null, 2));
     selectKey(null);
   });
@@ -945,6 +1022,9 @@ function wireToolbar() {
   $('#source-file').addEventListener('change', async (event) => {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
+    state.projectAttached = false;
+    state.projectPath = null;
+    comparison.reset();
     setSource(await file.text());
     selectKey(null);
     event.target.value = '';
@@ -952,9 +1032,9 @@ function wireToolbar() {
   $('#save-source').addEventListener('click', () => download('chart.json', state.source, 'application/json'));
   $('#export-chart').addEventListener('click', () => {
     $('#export-error').hidden = true;
-    const viewName = { gantt: 'Gantt', table: 'Table', burn: 'Burn', burndown: 'Burndown', burnup: 'Burnup', 'burn-table': 'Burn table' }[state.canvasTab];
-    $('#export-view-name').textContent = state.canvasTab === 'table'
-      ? `${viewName} — ${$('#table-filter').selectedOptions[0].textContent}` : viewName;
+    const viewName = { gantt: 'Gantt', table: 'Table', burn: 'Burn', burndown: 'Burndown', burnup: 'Burnup', 'burn-table': 'Burn table', 'compare-gantt':'Compare Gantt', 'compare-table':'Compare table' }[state.canvasTab];
+    $('#export-view-name').textContent = (comparison.enabled ? 'Compare ' : '') + (state.canvasTab === 'table'
+      ? `${viewName} — ${$('#table-filter').selectedOptions[0].textContent}` : viewName);
     $('#export-dialog').showModal();
   });
   $('#export-format').addEventListener('change', (event) => {
@@ -1012,30 +1092,7 @@ function redo() {
 }
 
 function wireTheme() {
-  const button = $('#theme');
-  const value = $('#theme-value');
-  const apply = (theme) => {
-    if (theme) document.documentElement.dataset.theme = theme;
-    else delete document.documentElement.dataset.theme;
-    value.textContent = theme ? theme : 'System';
-  };
-  let stored = null;
-  try {
-    stored = localStorage.getItem(STORAGE_THEME);
-  } catch (error) {
-    /* storage is optional */
-  }
-  apply(stored);
-  button.addEventListener('click', () => {
-    const current = document.documentElement.dataset.theme;
-    const next = current === 'dark' ? 'light' : 'dark';
-    apply(next);
-    try {
-      localStorage.setItem(STORAGE_THEME, next);
-    } catch (error) {
-      /* storage is optional */
-    }
-  });
+  wireThemeControl($('#theme'));
 }
 
 function wireKeyboard() {
@@ -1056,10 +1113,25 @@ function wireKeyboard() {
 
 async function loadInitialSource() {
   const params = new URLSearchParams(window.location.search);
+  const saved = readWorkspace();
+  if (saved && (!params.has('demo') || saved.entry === params.get('demo'))
+      && (params.get('project') !== '1' || saved.launchPath === state.launchPath)) {
+    restoredWorkspace = saved;
+    state.projectPath = saved.projectPath || null;
+    state.projectAttached = Boolean(saved.projectAttached && state.serverPreview);
+    if (['gantt','table','burn','burndown','burnup','burn-table'].includes(saved.canvasTab)) state.canvasTab=saved.canvasTab;
+    if (['all','milestones','tasks'].includes(saved.tableFilter)) state.tableFilter=saved.tableFilter;
+    if (saved.burn && typeof saved.burn === 'object') Object.assign(state.burn,saved.burn);
+    state.selection = saved.selection || null;
+    state.undoStack = Array.isArray(saved.undoStack) ? saved.undoStack.filter(item=>typeof item==='string').slice(-20) : [];
+    state.redoStack = Array.isArray(saved.redoStack) ? saved.redoStack.filter(item=>typeof item==='string').slice(-20) : [];
+    try { comparison.restore(saved.comparison); } catch { comparison.reset(); }
+    return saved.source;
+  }
   if (params.get('project') === '1') {
     try {
       const response = await fetch('__project.json');
-      if (response.ok) return await response.text();
+      if (response.ok) { state.projectAttached = true; return await response.text(); }
     } catch (error) {
       /* fall through to stored/starter source */
     }
@@ -1091,6 +1163,9 @@ async function boot() {
       const payload = await response.json();
       if (payload.status === 'ok') setExportBackend('server');
       state.serverPreview = payload.capabilities?.includes('chart-preview') === true;
+      state.projectPath = payload.project_path || null;
+      state.launchPath = state.projectPath;
+      $('#open-local-file').hidden = !payload.capabilities?.includes('local-files');
       state.serverBurnPreview = payload.capabilities?.includes('burn-preview') === true;
       if (payload.version) $('#app-version').textContent = payload.version;
     }
@@ -1098,6 +1173,25 @@ async function boot() {
     $('#app-version').textContent = 'web';
   }
   setSource(await loadInitialSource(), { pushHistory: false });
+  if (restoredWorkspace) {
+    const saved=restoredWorkspace;
+    if (Number.isFinite(saved.zoom)) setZoom(saved.zoom);
+    for (const [key,id,className] of [['sourceCollapsed','toggle-source','source-collapsed'],['layersCollapsed','toggle-layers','layers-collapsed']]) {
+      if (typeof saved[key] === 'boolean' && saved[key] !== elements.main.classList.contains(className)) $('#'+id).click();
+    }
+    if (saved.panelWidth) elements.main.style.setProperty('--panel-width',saved.panelWidth);
+    if (saved.layersWidth) elements.main.style.setProperty('--layers-open-width',saved.layersWidth);
+    if (saved.inspectorPosition?.left) inspectorDrag.restore({x:parseFloat(saved.inspectorPosition.left), y:parseFloat(saved.inspectorPosition.top)});
+    if (saved.sourceScroll) [elements.source.scrollLeft,elements.source.scrollTop]=saved.sourceScroll;
+    syncHighlightScroll();
+    $('#table-filter').value=state.tableFilter;
+    for (const [id,key] of [['burn-field','field'],['burn-period','period'],['burn-group','group'],['burn-factor','factor']]) $('#'+id).value=state.burn[key];
+  }
+  workspaceReady = true;
+  persistWorkspace();
+  for (const event of ['input','change','click','pointerup','keydown','scroll']) document.addEventListener(event,()=>queueMicrotask(persistWorkspace),true);
+  window.addEventListener('pagehide',persistWorkspace);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)persistWorkspace();});
 }
 
 boot();

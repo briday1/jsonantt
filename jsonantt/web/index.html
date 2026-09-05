@@ -29,7 +29,11 @@
             <strong>SOURCE</strong>
             <button id="new-chart" type="button">New chart</button>
             <button id="load-source" type="button">Open JSON…</button>
+            <button id="open-local-file" type="button" hidden>Open local file…</button>
             <button id="save-source" type="button">Save JSON…</button>
+            <button id="open-append" type="button">Append JSON…</button>
+            <button id="open-compare" type="button">Compare…</button>
+            <label><input id="compare-mode-toggle" type="checkbox"> Compare mode</label>
             <span class="menu-separator"></span>
             <strong>CANVAS (rendered by the jsonantt CLI / matplotlib)</strong>
             <button id="export-chart" type="button">Export…</button>
@@ -48,10 +52,10 @@
           <div class="toolbar-popover">
             <button id="chart-settings" type="button">Chart settings…</button>
             <span class="menu-separator"></span>
-            <button class="theme-toggle" id="theme" type="button" aria-label="Toggle light and dark theme" title="Theme follows your system until toggled">
+            <button class="theme-toggle" id="theme" type="button" role="switch" aria-label="Dark theme" aria-checked="false">
               <span class="theme-sun" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"></path></svg></span>
               <span class="theme-moon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5 8.5 8.5 0 1 0 20.5 14.1Z"></path></svg></span>
-              <span>Theme</span><small id="theme-value">System</small>
+              <span>Theme</span><small data-theme-label>Light</small>
             </button>
           </div>
         </details>
@@ -62,7 +66,7 @@
       <input id="source-file" type="file" accept=".json,application/json" hidden />
     </header>
 
-    <main>
+    <main class="layers-collapsed">
       <aside id="source-panel" aria-label="Chart source">
         <div class="panel-title"><h1>Chart source</h1></div>
         <div class="editor-shell">
@@ -119,6 +123,7 @@
             <label>Display multiplier <input id="burn-factor" type="number" step="any" value="1" /></label>
           </div>
         </div>
+        <button id="compare-indicator" type="button" hidden>Compare mode · baseline vs current · change…</button>
         <div class="canvas-shell" tabindex="0" title="Click an element to select it; Ctrl/⌘ + mouse wheel to zoom">
           <div id="canvas"></div>
           <div class="canvas-toast" id="canvas-toast" role="status" aria-live="polite"></div>
@@ -132,7 +137,7 @@
 
       <div class="graph-panel-resizer" id="graph-panel-resizer" role="separator" aria-label="Resize objects panel" aria-controls="layers-panel" aria-orientation="vertical" tabindex="0"></div>
 
-      <button class="layers-toggle panel-toggle" id="toggle-layers" type="button" aria-controls="layers-panel" aria-expanded="true" aria-label="Hide objects panel" title="Hide objects panel"><span class="toggle-arrow" aria-hidden="true">›</span><span class="toggle-label">Objects</span></button>
+      <button class="layers-toggle panel-toggle" id="toggle-layers" type="button" aria-controls="layers-panel" aria-expanded="false" aria-label="Show objects panel" title="Show objects panel"><span class="toggle-arrow" aria-hidden="true">‹</span><span class="toggle-label">Objects</span></button>
 
       <aside class="layers-panel" id="layers-panel" aria-label="Objects">
         <div class="layers-title"><div><small>CHART STRUCTURE</small><h2>Objects</h2></div></div>
@@ -190,6 +195,44 @@
       </form>
     </dialog>
 
+    <dialog id="append-dialog" aria-labelledby="append-title">
+      <div class="settings-dialog-header"><h2 id="append-title">Append task files</h2><button id="close-append" type="button" aria-label="Close">×</button></div>
+      <div class="append-content">
+        <div class="compare-actions"><button id="append-pick" type="button">Choose JSON files…</button><button id="append-folder-pick" type="button">Load folder…</button><button id="append-clear" type="button">Clear list</button></div>
+        <input id="append-files" type="file" multiple accept=".json,application/json" hidden>
+        <input id="append-folder" type="file" multiple webkitdirectory hidden>
+        <label>Placement <select id="append-placement"><option value="inline">Append tasks inline</option><option value="wrapped">One parent task per file</option></select></label>
+        <div id="append-list" aria-label="Files in append order"></div>
+        <p id="append-status" role="status"></p>
+        <div class="dialog-actions"><button id="confirm-append" type="button" class="primary" disabled>Append selected files</button></div>
+      </div>
+    </dialog>
+    <dialog id="compare-dialog" aria-labelledby="compare-title">
+      <div class="settings-dialog-header"><h2 id="compare-title">Compare outputs</h2><button id="close-compare" type="button" aria-label="Close">×</button></div>
+      <div id="compare-controls">
+        <p id="compare-current-file"></p>
+        <p id="compare-baseline-file"></p>
+        <label><input id="compare-enabled" type="checkbox"> Compare mode — applies to every output tab</label>
+        <div class="compare-actions">
+          <button id="compare-upload" type="button">Choose baseline JSON…</button>
+          <button id="compare-history" type="button">Git history…</button>
+          <input id="compare-file" type="file" accept=".json,application/json" hidden>
+        </div>
+        <select id="compare-revisions" size="8" aria-label="Baseline Git revision: date, SHA, commit message" hidden></select>
+        <p id="compare-status" role="status">Choose another JSON file or a Git revision as the baseline.</p>
+        <div class="dialog-actions compare-dialog-actions"><button id="confirm-compare" type="button" class="primary" disabled>Apply comparison</button></div>
+      </div>
+    </dialog>
+    <dialog id="local-file-dialog" aria-labelledby="local-file-title">
+      <div class="settings-dialog-header"><h2 id="local-file-title">Open local JSON file</h2><button id="local-file-close" type="button" aria-label="Close">×</button></div>
+      <div class="local-file-content">
+        <label for="local-file-path">Full file or directory path</label>
+        <input id="local-file-path" type="text" spellcheck="false">
+        <div class="compare-actions"><button id="local-file-browse" type="button">Browse directory</button><button id="local-file-open" type="button">Open file</button></div>
+        <div id="local-file-list" aria-label="Directories and JSON files"></div>
+        <p id="local-file-status" role="status"></p>
+      </div>
+    </dialog>
     <script type="module" src="app.mjs"></script>
   </body>
 </html>

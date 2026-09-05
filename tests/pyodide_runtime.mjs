@@ -42,3 +42,19 @@ for (const mode of ['burndown','burnup']) {
   }
 }
 console.log('Passed WASM burndown/burnup today markers in preview and export.');
+const comparison=JSON.stringify({planned:JSON.parse(source),actual:JSON.parse(source)});
+for(const mode of ['gantt','table','burn','burndown','burnup','burn-table']) {
+  const options={mode:`compare-${mode}`,format:'svg',interactive:true};
+  const svg=new TextDecoder().decode(engine.render(comparison,options));
+  assert(svg.includes('<svg') && !svg.includes('<image'),mode+' comparison must remain vector');
+  const png=engine.render(comparison,{...options,format:'png',dpi:40});
+  assert.deepEqual([...png.slice(0,8)],[137,80,78,71,13,10,26,10]);
+  if(mode.endsWith('table')) assert(new TextDecoder().decode(engine.render(comparison,{...options,format:'csv'})).includes('Parent'));
+}
+console.log('Passed WASM all six comparison modes: SVG, PNG and table CSV exports.');
+const composition={document:{title:'Main',tasks:[]},files:{'phase.json':{tasks:[{filename:'work.json'}]},'work.json':{tasks:[{name:'Imported',start:'2026-01-01',duration:'1w'}]}},append:['phase.json'],wrap:true};
+const composed=JSON.parse(new TextDecoder().decode(engine.render(JSON.stringify(composition),{action:'compose',format:'json'})));
+assert.equal(composed.tasks[0].name,'phase');
+assert.equal(composed.tasks[0].tasks[0].name,'Imported');
+assert(!JSON.stringify(composed).includes('filename'));
+console.log('Passed WASM portable multi-file composition through the shared Python parser.');

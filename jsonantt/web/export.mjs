@@ -35,14 +35,15 @@ export async function serverExportAvailable() {
 export async function exportChart(source, { mode, format, dpi = 150, tableFilter = 'all', renderDepth = 0, burn = {} } = {}) {
   if (backend === 'browser') return renderInBrowser(source, {mode,format,dpi,tableFilter,renderDepth,burn});
   const params = new URLSearchParams({ mode, format, dpi: String(dpi) });
-  if (mode === 'table' || mode === 'gantt') params.set('render_depth', String(renderDepth));
-  if (mode === 'table') params.set('table_filter', tableFilter);
-  if (mode?.startsWith('burn')) {
+  if (['table','gantt','compare-gantt','compare-table'].includes(mode)) params.set('render_depth', String(renderDepth));
+  if (mode === 'table' || mode === 'compare-table') params.set('table_filter', tableFilter);
+  if (mode?.startsWith('burn') || mode?.startsWith('compare-burn')) {
     params.set('burn_field', burn.field ?? 'cost');
     params.set('burn_period', burn.period ?? 'month');
     params.set('burn_group', burn.group ?? '0');
     params.set('burn_factor', String(burn.factor ?? 1));
-    params.set('burn_display', mode === 'burn' ? (burn.display ?? 'spend') : burnDisplayForMode(mode));
+    const baseMode = mode.replace(/^compare-/, '');
+    params.set('burn_display', baseMode === 'burn' ? (burn.display ?? 'spend') : burnDisplayForMode(baseMode));
   }
   const response = await fetch(`/api/export?${params.toString()}`, {
     method: 'POST',

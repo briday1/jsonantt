@@ -103,6 +103,9 @@ jsonantt project.json project.png --date-line today --date-line-color "#C00000" 
 
 **Python API:**
 
+See the [complete Python and HTTP API reference](docs/api.rst) for every mode,
+CLI-option mapping, source settings, comparison, and local-file/Git endpoints.
+
 ```python
 from jsonantt import load_chart, render_burn_chart, render_burn_table, render_chart, render_compare_chart, render_compare_table, render_table
 
@@ -265,7 +268,21 @@ For standalone source formatting, use `jsonantt fmt` from the command line.
 
 The hosted GUI supports editing, interactive previews, and PNG/SVG/CSV export
 through Pyodide. Choose **File → Export…** for PNG/SVG and PNG resolution, or
-**File → Save CSV…** in a table view. Compare output remains a CLI feature.
+**File → Save CSV…** in a table view. Open **File → Compare…** for comparisons:
+upload any baseline JSON, or use **Git history…** to select a dated
+commit (SHA and message included). On the local server, **File → Open local file…**
+selects a file by its full path so Git history follows that file, including renames.
+The baseline is read-only; the current editor is the actual/updated side.
+Toggle **File → Compare mode** off to return to ordinary output. While enabled,
+every existing output tab uses that baseline: Gantt/table use the CLI comparison
+renderers; burn views show exact baseline/current drawings side by side.
+
+Refresh/revisit restores unsaved source (even temporarily invalid JSON), the
+current file, view/filter/zoom, comparison baseline, panels, and up to 20 undo/redo
+entries from browser storage. This does not save to disk. Storage is browser/origin
+specific; private mode, clearing site data, or storage limits can prevent recovery.
+Use **Save JSON…** for a durable copy. An explicit different demo or startup file
+opens that document instead of restoring the previous workspace.
 
 ### Run your own local instance
 
@@ -415,6 +432,19 @@ preserved). The studio uses the same formatter, so both paths produce identical 
 `tasks` and `children` are interchangeable at both the chart root and inside nested task objects. If both are present on the same object, jsonantt reads both lists in order.
 
 `filename` lets you build a larger plan from smaller task files. A task entry that is only `{ "filename": "phase.json" }` inlines the referenced file's tasks at that position. When `filename` appears alongside normal task fields like `name` or `description`, the referenced file's tasks are imported as that task's children. The included file's `style`, `title`, chart `start`/`end`, and `arrows` are ignored during inclusion; only its task tree is used.
+
+In the GUI, use **File → Append JSON…**. Select multiple files (or load a folder
+for nested includes), check the files to append, reorder them, and choose
+**Append tasks inline** or **One parent task per file**. Click **Append selected files**
+to confirm. Files referenced by another selected file are kept available for
+include resolution but are initially unchecked to avoid importing their tasks twice.
+
+GUI composition uses the CLI's task inclusion rules and converts imported dates
+to the destination chart's date format. It creates **editable snapshots**, not
+live `filename` links: Save JSON produces one portable document, original files
+are untouched, and Undo removes an entire append operation. Duplicate task IDs,
+missing include files, or circular includes leave the current document unchanged.
+Use `filename` references in CLI-managed sources when you want live file links.
 
 ```json
 {

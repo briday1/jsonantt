@@ -10,11 +10,15 @@ import { formatDate, parseDate } from './model.mjs';
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
 let openPopup = null;
+let openTrigger = null;
 
 function closeOpenPopup() {
   if (openPopup) {
     openPopup.remove();
     openPopup = null;
+    openTrigger?.setAttribute('aria-expanded', 'false');
+    if (openTrigger?.isConnected) openTrigger.focus();
+    openTrigger = null;
   }
 }
 
@@ -29,6 +33,8 @@ function buildCalendar({ format, initial, onPick }) {
 
   const popup = document.createElement('div');
   popup.className = 'date-picker';
+  popup.setAttribute('role', 'dialog');
+  popup.setAttribute('aria-label', 'Choose a date');
 
   const render = () => {
     popup.replaceChildren();
@@ -119,17 +125,17 @@ function buildCalendar({ format, initial, onPick }) {
  * Attach a calendar trigger to *input*. `format` is the chart's date format;
  * `onPick(text)` is called with the picked date in that format.
  */
-export function attachDatePicker(input, { format, onPick }) {
+export function attachDatePicker(input, { format, onPick, multiple = false }) {
   wireGlobalListeners(input);
   if (!input.parentNode) {
     // Not mounted yet: wrap now and let the caller append the wrapper instead.
     const wrapper = document.createElement('span');
     wrapper.className = 'date-field';
     wrapper.append(input);
-    buildTrigger(wrapper, input, { format, onPick });
+    buildTrigger(wrapper, input, { format, onPick, multiple });
     return wrapper;
   }
-  buildTrigger(wrapInline(input), input, { format, onPick });
+  buildTrigger(wrapInline(input), input, { format, onPick, multiple });
   return null;
 }
 
@@ -141,11 +147,13 @@ function wrapInline(input) {
   return wrapper;
 }
 
-function buildTrigger(wrapper, input, { format, onPick }) {
+function buildTrigger(wrapper, input, { format, onPick, multiple }) {
   const trigger = document.createElement('button');
   trigger.type = 'button';
   trigger.className = 'date-trigger';
   trigger.setAttribute('aria-label', 'Pick a date');
+  trigger.setAttribute('aria-haspopup', 'dialog');
+  trigger.setAttribute('aria-expanded', 'false');
   trigger.title = 'Pick a date';
   trigger.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2"></rect><path d="M8 3v5M16 3v5M3.5 10h17"></path></svg>';
   wrapper.append(trigger);
@@ -153,19 +161,37 @@ function buildTrigger(wrapper, input, { format, onPick }) {
   trigger.addEventListener('click', (event) => {
     event.stopPropagation();
     if (openPopup) {
+      const sameTrigger = openTrigger === trigger;
       closeOpenPopup();
-      return;
+      if (sameTrigger) return;
     }
     let initial = null;
     try {
-      if (input.value.trim()) initial = parseDate(input.value, format);
+      let text = multiple ? input.value.split(',').at(-1).trim() : input.value.trim();
+      if (format === '%m-%d' && /^\d{1,2}$/.test(text)) text += '-01';
+      if (text) initial = parseDate(text, format);
+      if (initial && !/%[Yy]/.test(format)) initial.setUTCFullYear(new Date().getFullYear());
     } catch (error) {
       initial = null;
     }
-    const popup = buildCalendar({ format, initial, onPick });
+    const popup = buildCalendar({ format, initial, onPick: text => {
+      if (multiple) {
+        const parts = input.value.split(',');
+        parts[parts.length - 1] = text;
+        text = parts.map(part=>part.trim()).filter(Boolean).join(', ');
+      }
+      input.value = text;
+      onPick(text);
+    }});
     // Keep clicks inside the calendar from reaching the dismissal listener.
     popup.addEventListener('click', (clickEvent) => clickEvent.stopPropagation());
-    document.body.append(popup);
+    // The dialog keeps the calendar in its focus scope; a popover raises it
+    // above modal content and scrolling/clipping containers in the top layer.
+    (input.closest('dialog[open]') || document.body).append(popup);
+    if (typeof popup.showPopover === 'function') {
+      popup.setAttribute('popover', 'manual');
+      popup.showPopover();
+    }
     const triggerBox = trigger.getBoundingClientRect();
     const popupBox = popup.getBoundingClientRect();
     const gap = 4;
@@ -180,6 +206,9 @@ function buildTrigger(wrapper, input, { format, onPick }) {
     popup.style.left = `${left}px`;
     popup.style.top = `${top}px`;
     openPopup = popup;
+    openTrigger = trigger;
+    trigger.setAttribute('aria-expanded', 'true');
+    popup.querySelector('.date-picker-day.selected, .date-picker-day.today, .date-picker-day')?.focus();
   });
 }
 
@@ -196,8 +225,10 @@ function wireGlobalListeners(input) {
   });
   doc.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && openPopup) {
+      event.preventDefault();
       event.stopPropagation();
       closeOpenPopup();
     }
-  });
+  }, true);
+  doc.addEventListener('close', () => { if (openPopup) closeOpenPopup(); }, true);
 }

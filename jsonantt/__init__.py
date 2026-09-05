@@ -27,9 +27,13 @@ Or from the command line::
     jsonantt --table --no-milestones project.json tasks-no-milestones.png
 """
 from .parser import load_chart, parse_chart
+from .api import render_document
+from .composition import compose_document
 from .renderer import render_burn_chart, render_burn_table, render_chart, render_compare_chart, render_compare_table, render_table
 
 __all__ = [
+    "render_document",
+    "compose_document",
     "load_chart",
     "parse_chart",
     "render_burn_chart",

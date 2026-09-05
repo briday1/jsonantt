@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from datetime import date, datetime
 from pathlib import Path
 import sys
@@ -275,8 +276,6 @@ def main(argv=None) -> int:
             render_kwargs["date_line"] = line_date
             render_kwargs["date_line_color"] = args.date_line_color
         if args.burn or args.burndown or args.burnup or args.burn_table:
-            if compare_config is not None:
-                raise ValueError("compare mode is not supported for burn output")
             if args.milestones_only or args.no_milestones:
                 raise ValueError("milestone filters are only supported with --table")
         if args.table:
@@ -287,7 +286,19 @@ def main(argv=None) -> int:
         elif args.no_milestones:
             raise ValueError("--no-milestones requires --table")
 
-        if args.burn or args.burndown or args.burnup:
+        if compare_config is not None and (args.burn or args.burndown or args.burnup or args.burn_table):
+            from .api import render_document
+            mode = 'burn-table' if args.burn_table else 'burndown' if args.burndown else 'burnup' if args.burnup else 'burn'
+            options = {'mode': 'compare-'+mode, 'format': output_ext[1:], 'dpi': args.dpi,
+                       'burn': {'field': args.burn_field, 'period': args.burn_period, 'group': args.burn_group,
+                                'factor': args.burn_display_factor, 'display': args.burn_display},
+                       'valueFormat': overrides, 'dateLineColor': args.date_line_color}
+            if args.date_line:
+                options['dateLine'] = args.date_line
+            source = {'planned': json.loads(Path(args.input).read_text(encoding='utf-8')),
+                      'actual': json.loads(Path(args.compare).read_text(encoding='utf-8'))}
+            Path(args.output).write_bytes(render_document(source, options))
+        elif args.burn or args.burndown or args.burnup:
             render_burn_chart(
                 config,
                 args.output,

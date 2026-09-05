@@ -21,6 +21,10 @@ export function interactiveChartSvg(text, chart, options, selectedKey = null) {
   svg.dataset.previewMode = options.mode;
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', `${chart.title || options.mode} — interactive CLI renderer preview`);
+  if (options.mode.startsWith('compare-')) {
+    svg.setAttribute('aria-label', 'Baseline versus current chart comparison');
+    return svg;
+  }
   const title = (node, text) => {
     const label = document.createElementNS('http://www.w3.org/2000/svg','title');
     label.textContent = text;
@@ -126,19 +130,20 @@ export function createPreviewLoader({onRender, onError, onPending = () => {}, on
           let text;
           if (useBrowser(options)) {
             const blob = await renderInBrowser(source, {mode:options.mode,format:'svg',interactive:true,
-              renderDepth:options.renderDepth,tableFilter:options.tableFilter,burn:options},
+              renderDepth:options.renderDepth,tableFilter:options.tableFilter,
+              burn:{field:options.field,period:options.period,group:options.group,factor:options.factor}},
             {signal:controller.signal,onProgress:message=>{if (ticket === generation) onProgress(message);}});
             text = await blob.text();
           } else {
           const params = new URLSearchParams({mode:options.mode});
-          if (options.mode.startsWith('burn')) {
+          if (options.mode.startsWith('burn') || options.mode.startsWith('compare-burn')) {
             params.set('burn_field',options.field ?? 'cost');
             params.set('burn_period',options.period ?? 'month');
             params.set('burn_group',options.group ?? '0');
             params.set('burn_factor',options.factor ?? 1);
           } else {
             if (options.renderDepth !== undefined) params.set('render_depth',options.renderDepth);
-            if (options.mode === 'table') params.set('table_filter',options.tableFilter ?? 'all');
+            if (options.mode === 'table' || options.mode === 'compare-table') params.set('table_filter',options.tableFilter ?? 'all');
           }
           const response = await fetch(`/api/preview?${params}`, {method:'POST',headers:{'Content-Type':'application/json'},body:source,signal:controller.signal});
           if (!response.ok) {

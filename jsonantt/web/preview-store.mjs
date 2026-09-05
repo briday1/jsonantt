@@ -1,11 +1,11 @@
 /** Versioned exact-SVG cache. Never substitute a drawing for different source/options. */
 export function previewKey(source, options) {
-  const settings = options.mode.startsWith('burn')
+  const settings = (options.mode.startsWith('burn') || options.mode.startsWith('compare-burn'))
     ? {mode:options.mode,field:options.field ?? 'cost',period:options.period ?? 'month',group:String(options.group ?? '0'),factor:Number(options.factor ?? 1)}
-    : {mode:options.mode,renderDepth:Number(options.renderDepth ?? 0),...(options.mode === 'table' ? {tableFilter:options.tableFilter ?? 'all'} : {})};
+    : {mode:options.mode,renderDepth:Number(options.renderDepth ?? 0),...(options.mode.endsWith('table') ? {tableFilter:options.tableFilter ?? 'all'} : {})};
   const doc = JSON.parse(source);
   // Today's marker invalidates an otherwise identical preview at midnight.
-  const day = doc.style?.today_marker ? [new Date().toDateString(),new Date().toISOString().slice(0,10)] : null;
+  const day = (doc.style?.today_marker || doc.planned?.style?.today_marker) ? [new Date().toDateString(),new Date().toISOString().slice(0,10)] : null;
   return JSON.stringify([doc,settings,day]);
 }
 

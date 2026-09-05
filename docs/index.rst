@@ -53,6 +53,7 @@ What it can do
    json-reference
    style-guide
    cli
+   api
    studio
 
 .. toctree::

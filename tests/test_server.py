@@ -125,6 +125,41 @@ def running_server():
 
 
 class TestStudioServer:
+    def test_composition_endpoint(self,running_server):
+        from tests.test_composition import BASE,FILES
+        from jsonantt import compose_document
+        payload={'document':BASE,'files':FILES,'append':['phase.json','delivery.json'],'wrap':True}
+        request=Request(running_server+'/api/compose',data=json.dumps(payload).encode())
+        with urlopen(request) as response:
+            assert json.load(response)==compose_document(**payload)
+
+    def test_api_discovery(self, running_server):
+        with urlopen(running_server+'/api') as response:
+            data=json.load(response)
+        assert 'compare-gantt' in data['modes']
+        assert 'compare-table' in data['csv_modes']
+        assert {'date_line','value_scale','render_depth'} <= set(data['query_parameters'])
+
+    @pytest.mark.parametrize('mode', ['compare-gantt','compare-table'])
+    def test_compare_http_exports_and_preview(self, running_server, mode):
+        from tests.test_burn_preview import CHART_SOURCE
+        from jsonantt import render_document
+        document={'planned':CHART_SOURCE,'actual':CHART_SOURCE}
+        request=Request(running_server+f'/api/export?mode={mode}&dpi=40',data=json.dumps(document).encode())
+        with urlopen(request) as response:
+            assert response.read()==render_document(document,{'mode':mode,'format':'png','dpi':40})
+        request=Request(running_server+f'/api/preview?mode={mode}',data=json.dumps(document).encode())
+        with urlopen(request) as response:
+            assert b'<svg' in response.read()
+
+    @pytest.mark.parametrize('query', ['dpi=nope','dpi=0','render_depth=-1','date_line=oops','value_decimals=-1','typo=yes','mode=gantt&mode=table'])
+    def test_api_option_errors_are_json(self, running_server, query):
+        request=Request(running_server+'/api/export?'+query,data=b'{"tasks":[]}')
+        with pytest.raises(HTTPError) as error:
+            urlopen(request)
+        assert error.value.code==400
+        assert json.load(error.value)['error']
+
     def test_healthz_reports_version(self, running_server):
         with urlopen(f"{running_server}/healthz") as response:
             payload = json.loads(response.read().decode("utf-8"))
