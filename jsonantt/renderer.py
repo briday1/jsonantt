@@ -2441,7 +2441,7 @@ def _tick_locator_fmt(key: str, span_days: int, fiscal_start: Optional[Tuple[int
             return f"Q{q} {d.year}"
         return mdates.MonthLocator(bymonth=[1, 4, 7, 10]), ticker.FuncFormatter(_qfmt)
     elif k in ("month", "months"):
-        return mdates.MonthLocator(), mdates.DateFormatter("%b '%y")
+        return mdates.MonthLocator(), mdates.DateFormatter("%b")
     elif k in ("week", "weeks"):
         return mdates.WeekdayLocator(byweekday=mdates.MO), mdates.DateFormatter("%b %d")
     elif k in ("day", "days"):

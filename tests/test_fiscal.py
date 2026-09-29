@@ -95,6 +95,10 @@ class TestFiscalTicks:
         locator, fmt = _tick_locator_fmt("quarter", 400)
         assert fmt(mdates.date2num(datetime(2025, 10, 1))) == "Q4 2025"
 
+    def test_month_formatter_omits_year(self):
+        locator, fmt = _tick_locator_fmt("month", 400)
+        assert fmt(mdates.date2num(datetime(2025, 10, 1))) == "Oct"
+
 
 class TestFiscalRendering:
     def test_render_chart_with_fiscal_year(self, tmp_path):
